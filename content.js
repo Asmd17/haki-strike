@@ -237,6 +237,23 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .msg.on{opacity:1;transform:none;pointer-events:auto}
 .msg.ok{color:#EDEEF0}.msg.ok:before{background:#37D399}.msg.bad{color:#FFB3BC}.msg.bad:before{background:#F0596B}
 .msg span{overflow:hidden;text-overflow:ellipsis}
+.set .sl.asl{color:#3DDC97}
+.snp{height:22px;margin-left:6px;padding:0 8px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;color:#C9CCD1;font-size:11.5px;font-weight:600}
+.snp:hover{color:#fff;background:#252834}
+/* 3.25.0 (owner: "the pop-up under the panel is not harmonious"): a status bar under the panel, exactly its width */
+.msg{box-sizing:border-box;height:36px;gap:10px;padding:0 8px 0 10px;border-radius:10px;background:#1B1D26;color:#C9CCD1;font:500 12.5px/16px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;
+ box-shadow:0 0 0 1px #2A2D39,0 18px 40px -12px rgba(0,0,0,.85);transform:translateY(-6px);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}
+.msg.on{transform:none}
+.msg:before{width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:none;border:2px solid #3A3E4C;border-top-color:#C9CCD1;animation:hkspin .8s linear infinite}
+.msg.ok:before,.msg.bad:before{border:0;animation:none;background-repeat:no-repeat;background-position:center;background-size:16px}
+.msg.ok:before{background-color:rgba(61,220,151,.14);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%233DDC97' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 8.2 2 2 4-4.4'/%3E%3C/svg%3E")}
+.msg.bad:before{background-color:rgba(255,92,120,.14);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23FF5C78' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='m5.5 5.5 5 5m0-5-5 5'/%3E%3C/svg%3E")}
+.msg.ok{color:#EDEEF2}.msg.bad{color:#FFC7D0}
+.msg span{flex:1;min-width:0}
+.msg .rpt{height:24px;margin:0;padding:0 10px;border-radius:7px;background:#252834;box-shadow:inset 0 0 0 1px #2E3240;color:#EDEEF2;font:600 11.5px/24px HakiGeist,Geist,system-ui,sans-serif}
+.msg .rpt:hover{background:#2B2F3B}
+@keyframes hkspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.msg:before{animation:none}.msg{transition:opacity .16s ease}}.snp.on{color:#F5A524;box-shadow:inset 0 0 0 1px rgba(245,165,36,.5)}   /* 3.24.0: anti-sandwich slippage in use */
 .msg .rpt{flex:none;height:20px;margin-right:-4px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#EDEEF0;font:600 11px/20px HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
 .msg .rpt:hover{background:rgba(255,255,255,.12)}
 .updb{display:none;width:calc(100% - 24px);height:28px;margin:0 12px 10px;border-radius:8px;background:#1C1D21;color:#EDEEF0;font-weight:600}.updb.on{display:block}.updb:hover{background:#26282D}
@@ -446,7 +463,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
   <button class="ib mn" title="Minimise" aria-label="Minimise">${I.min}</button>
  </div>
  <section class="side sb">
-  <div class="hd"><span class="lb">Buy</span><span class="ccy"><span>${SOLI}SOL</span></span><span class="rt num"><b class="bal">–</b>${SOLI}</span></div>
+  <div class="hd"><span class="lb">Buy</span><span class="ccy"><span>${SOLI}SOL</span></span><button class="snp" type="button" hidden>Snipe</button><span class="rt num"><b class="bal">–</b>${SOLI}</span></div>
   <div class="rail rb"></div>
   <div class="set"><span title="Slippage">${I.slip}<b class="num sl">–</b></span><span title="Priority fee + bribe, SOL">${I.gas}<b class="num fe">–</b></span><span class="gu num fu"></span><span class="fast" title="">${I.fast}<b>Fast</b></span><button class="adv" aria-expanded="false">Custom</button></div>
   <div class="cus"><input class="amt" inputmode="decimal" placeholder="Amount in SOL" aria-label="Buy amount in SOL"><button class="cgo">Buy</button></div>
@@ -507,8 +524,8 @@ button.c:active{transform:translateY(1px) scale(.985)}
   /* the toast: the first part of the message (what happened), the rest in its tooltip; under the panel, or above it near the bottom */
   let sT = 0;
   const zNow = () => { try { return Z; } catch (_) { return 1; } };   /* Z is declared further down */
-  const toastAt = () => { const r = P.getBoundingClientRect(); if (!r.width) return; const Z = zNow(), h = 30 * Z, below = r.bottom + 6 + h < innerHeight - 4;
-    S.style.left = r.left / Z + 'px'; S.style.maxWidth = r.width / Z + 'px'; S.style.top = (below ? r.bottom + 6 : r.top - 6 - h) / Z + 'px'; };
+  const toastAt = () => { const r = P.getBoundingClientRect(); if (!r.width) return; const Z = zNow(), h = 36 * Z, below = r.bottom + 8 + h < innerHeight - 4;
+    S.style.left = r.left / Z + 'px'; S.style.width = S.style.maxWidth = r.width / Z + 'px'; S.style.top = (below ? r.bottom + 8 : r.top - 8 - h) / Z + 'px'; };
   const status = (t, k) => {
     clearTimeout(sT); S.title = t || '';
     if (!t || P.hidden) { S.className = 'msg' + (k ? ' ' + k : ''); return; }
@@ -522,7 +539,14 @@ button.c:active{transform:translateY(1px) scale(.985)}
   let nBuy = 0, selling = false;   /* buys run side by side (every click is a buy); a sell blocks the sell buttons until it is back */
   const lock = () => { busy = selling || nBuy > 0; for (const b of $$('.rs button.c, .init')) b.disabled = selling; };
   const pre = () => (C && C.presets && C.presets[C.preset || 0]) || { slip: 20, prio: 0.0001, tip: 0.0003 };
-  function paintSet() {
+  function aslipPaint() {   /* 3.24.0 anti-sandwich: the slippage the next buy / sell will use, from this coin's real moves (your preset is the most) */
+    const sl = $$('.sl'), A2 = last && last.aslip, on = C && C.autoSlip !== false && !PAPER;
+    [['b', 0], ['s', 1]].forEach(([k, i]) => { const e = sl[i]; if (!e) return; const v = on && A2 && A2[k];
+      if (v) { const t = (+v).toFixed(1).replace(/\.0$/, '') + '%'; if (e.textContent !== t) e.textContent = t; e.classList.add('asl'); e.parentElement.title = 'Anti-sandwich slippage ' + t + ': set from how this coin really moves between a click and its block. Your preset is the most it can be (Settings → Speed and fees)'; }
+      else if (e.classList.contains('asl')) { e.classList.remove('asl'); e.parentElement.title = 'Slippage'; } });
+  }
+  function paintSet() { paintSet0(); aslipPaint(); }
+  function paintSet0() {
     const p = pre(), fee = (+p.prio || 0) + (+p.tip || 0), sfee = (+(p.sprio ?? p.prio) || 0) + (+(p.stip ?? p.tip) || 0);
     const sl = $$('.sl'), fe = $$('.fe');
     const ex = false, et = (C && C.exactTol) || 2, etb = (C && C.exactTolBuy) || 5, ssl = +(p.sslip ?? p.slip);   /* 3.12.21 Exact sell */
@@ -544,7 +568,8 @@ button.c:active{transform:translateY(1px) scale(.985)}
   let port = null;
   function connect() {
     try { port = chrome.runtime.connect({ name: 'live' }); } catch (_) { port = null; return; }
-    port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
+    port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; }
+      if (m.snipe) { const z = m.snipe; status(z.msg, z.st === 'sent' || z.st === 'sim' ? 'ok' : z.st === 'error' ? 'bad' : ''); if (z.st === 'sent') window.hkSound('buy'); if (z.st !== 'armed') { SNP.delete(z.mint); snpPaint(); } return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
     port.onDisconnect.addListener(() => { port = null; setTimeout(() => { connect(); watchNow(); }, 600); });
   }
   let bscT = 0;
@@ -552,7 +577,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
     if (!BSCM() || PAPER) return; const a = A, p = await send('bscPos', { token: a }); if (a !== A || p.err || PAPER) return;
     if (p.bnb != null) { bal = p.bnb; paintBal(); }
     const L = await bled(a), val = p.value_bnb || 0, has = BigInt(p.raw || '0') > 0n, pnl = L.out + val - L.in;
-    paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null,
+    paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null, aslip: p.aslip,
       pnl: L.nb || L.ns ? { bought: L.in, sold: L.out, pnl, pct: L.in > 0 ? pnl / L.in * 100 : null, gas: 0, nb: L.nb, ns: L.ns } : null });
     if (!has && p.route && !['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3'].includes(p.route) && !S.title) status(p.why || 'no BNB market found for this coin', 'bad');
   }
@@ -561,6 +586,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
     if (BSCM()) { if (port) try { port.postMessage({ op: 'watch', a: null }); } catch (_) {} bscPoll(); bscT = setInterval(() => { if (!document.hidden) bscPoll(); }, 1500); return; }
     if (port) try { port.postMessage({ op: 'watch', a: A, isMint: isMintPage() }); } catch (_) {}
     if (PAPER) paperPoll();
+    if (C && C.snipe) send('snipe', { do: 'list' }).then(r => { if (r && !r.err) snpSet(r.armed); });
   };
   setInterval(() => { if (PAPER && A && !document.hidden && !P.hidden) paperPoll(); }, 1500);
   let nW = 1;   /* several wallets: the button shows how many (the SOL of all of them is in the Buy row) */
@@ -621,6 +647,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
   function paintPos(p) {
     if (p.err) return;
     last = p; lastT = Date.now(); const x = p.pnl, hold = p.value_sol, has = +p.raw > 0;
+    aslipPaint(); snpPaint();
     const posH = has ? '<b>' + ESC(fmt(p.ui)) + '</b> held' : 'No position'; if ($('.pos').innerHTML !== posH) $('.pos').innerHTML = posH; paintSubs(has ? +hold || 0 : 0); spkPush(p);
     $('.rs').classList.toggle('off', !has);
     setT('.ph', has ? showVal(hold || 0) : '0');
@@ -980,6 +1007,20 @@ button.c:active{transform:translateY(1px) scale(.985)}
   $$('.sxe').forEach(x => { x.onchange = e => { C.sellExact = !!e.target.checked; chrome.storage.local.set({ sellExact: C.sellExact }); paintSet(); }; });
   $('.kbt').onclick = () => { C.hk = !C.hk; chrome.storage.local.set({ hk: C.hk }); build(); };
   $('.cfg').onclick = () => send('openSettings');
+  /* 3.25.0 Snipe (an add-on of the owner's build): arm a curve coin, it is bought into its PumpSwap pool the moment migration creates it */
+  let SNP = new Map();
+  const snpPaint = () => { const b = $('.snp'); if (!b) return; const show = !!(C && C.snipe) && !!A && !isBsc(A) && !PAPER; b.hidden = !show; if (!show) return;
+    const m = (last && last.mint) || A, x = SNP.get(m); b.classList.toggle('on', !!x); b.textContent = x ? 'Armed ' + x.sol : 'Snipe';
+    b.title = x ? 'Armed: ' + x.sol + ' SOL is bought into the PumpSwap pool the moment this coin migrates. Click to disarm' : 'Snipe the migration: buy the moment the PumpSwap pool appears (amount: the Custom field, else your first buy key)'; };
+  const snpSet = L => { SNP = new Map((L || []).map(x => [x.mint, x])); snpPaint(); };
+  $('.snp').onclick = async e => {
+    if (!e.isTrusted || !A) return; const m = (last && last.mint) || A;
+    if (SNP.has(m)) { const r = await send('snipe', { do: 'off', a: A }); if (r && !r.err) snpSet(r.armed); return; }
+    const own = parseFloat(String(($('.amt') || {}).value || '').replace(',', '.')), sol = own > 0 ? own : +BROW()[0];
+    status('Arming snipe ' + sol + ' SOL…'); const r = await send('snipe', { do: 'arm', a: A, sol });
+    if (!r || r.err) { status('Snipe: ' + ((r && r.err) || 'failed'), 'bad'); return; }
+    snpSet(r.armed); status('Snipe armed: ' + sol + ' SOL the moment this coin migrates (keep Chrome open)', 'ok');
+  };
   $('.ppr').onchange = async e => { const r = await send('paperSet', { on: e.target.checked }); PAPER = !!(r && r.on); paperUi(); if (PAPER) status('Paper trading on: play money at live prices, nothing is sent', 'ok'); };
   $('.prs').onclick = async e => { e.stopPropagation(); const r = await send('paperSet', { reset: true }); paperBal(r && (BSCM() ? r.bnb : r.sol)); if (PAPER) paperPoll(); status('Paper money reset: 10 SOL and 1 BNB', 'ok'); };
   chrome.storage.local.get({ paper: null }).then(o => { const on = !!(o.paper && o.paper.on); if (on !== PAPER) { PAPER = on; paperUi(); } }).catch(() => {});
@@ -1024,6 +1065,18 @@ button.c:active{transform:translateY(1px) scale(.985)}
      after a long rest still only signs and sends */
   let hT = 0; const unhold = () => { clearInterval(hT); hT = 0; };
   const hold = f => { unhold(); f(); hT = setInterval(f, 1600); };
+  /* 3.24.0 (owner: "the trade ready before the click"): pump.fun and PumpSwap coins are built locally at the click (~1 ms, the coin's state
+     comes every block). A coin traded through Jupiter needs a route from the network, so while the panel is open on it every key is kept
+     built ahead (refreshed every 6 s, inside Jupiter's limits): the click only signs and sends */
+  const NATV = new Map();
+  setInterval(() => {
+    if (PAPER || !A || isBsc(A) || P.hidden || document.visibilityState !== 'visible' || !C || editing) return;
+    const a = A, im = isMintPage(), nv = NATV.get(a);
+    if (nv === undefined) { NATV.set(a, null); send('prep', { a, sol: BROW()[0], isMint: im }).then(r => { NATV.set(a, r && !r.err ? !!r.native : undefined); }); return; }
+    if (nv !== false) return;
+    for (const v of BROW()) send('prep', { a, sol: v, isMint: im });
+    if (last && +last.raw > 0) for (const v of SROW()) { const pc = pctOf(+v); if (pc != null) send('prep', { a, side: 'sell', pct: pc, isMint: im }); }
+  }, 6000);
   const warm = (a, v, isMint, side) => {   /* get the trade ready while the mouse rests on the button (150 ms): the click only signs and sends */
     clearTimeout(wD); if (!a || !(v > 0) || isBsc(a)) return; side = side || 'buy';
     if (side === 'sell' && !(last && +last.raw > 0)) return;
