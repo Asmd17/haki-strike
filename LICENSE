@@ -1,0 +1,33 @@
+HAKI Strike Source-Available License
+Copyright (c) 2026 HAKI (hakitrade.com). All rights reserved.
+
+This repository is published so that anyone can read the code of the HAKI Strike
+browser extension and check how it handles wallets and private keys.
+It is NOT open source.
+
+1. You may read and review this source code, including for security research,
+   and you may discuss it and report problems with it.
+
+2. You may install and use the official HAKI Strike extension as published by
+   HAKI on the Chrome Web Store, for your own trading.
+
+3. Without prior written permission from HAKI, you may NOT:
+   a. copy, reproduce, or redistribute this code or any part of it;
+   b. modify it, translate it, or create derivative works based on it;
+   c. build, publish, sell, rent, or offer any extension, application, bot,
+      service, or product that contains or is derived from this code;
+   d. remove or change this notice, the HAKI name, or the HAKI logos.
+
+4. The HAKI name, logos, and artwork are trademarks or property of HAKI and are
+   not licensed under this notice.
+
+5. Fonts in the fonts/ folder are distributed under their own SIL Open Font
+   License (see the OFL files there). Third-party program addresses and public
+   blockchain data referenced in the code belong to their owners.
+
+6. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. TRADING DIGITAL ASSETS IS RISKY. IN NO EVENT SHALL HAKI BE LIABLE FOR
+   ANY CLAIM, LOSS, OR DAMAGE ARISING FROM THE USE OF THE SOFTWARE.
+
+Any use not expressly allowed above is prohibited. Requests for permission:
+open an issue in this repository.

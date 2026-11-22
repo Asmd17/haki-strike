@@ -1,0 +1,126 @@
+{
+  "manifest_version": 3,
+  "name": "HAKI Strike",
+  "version": "3.21.5",
+  "description": "One-click trading on Axiom, GMGN and Terminal from your own wallet: pump.fun direct, fast lanes, auto sell. Keys stay in browser.",
+  "icons": {
+    "16": "icons/fav-16.png",
+    "32": "icons/fav-32.png",
+    "48": "icons/fav-48.png",
+    "128": "icons/fav-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/fav-16.png",
+      "32": "icons/fav-32.png"
+    }
+  },
+  "options_page": "popup.html",
+  "background": {
+    "service_worker": "bg.js"
+  },
+  "permissions": [
+    "storage",
+    "declarativeNetRequestWithHostAccess",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://lite-api.jup.ag/*",
+    "https://api.jup.ag/*",
+    "https://solana-rpc.publicnode.com/*",
+    "https://mainnet.block-engine.jito.wtf/*",
+    "https://sender.helius-rpc.com/*",
+    "http://fra-sender.helius-rpc.com/*",
+    "https://ipfs.io/*",
+    "https://static.datapi.jup.ag/*",
+    "https://*.mypinata.cloud/*",
+    "https://gateway.pinata.cloud/*",
+    "https://dweb.link/*",
+    "https://w3s.link/*",
+    "http://ams-sender.helius-rpc.com/*",
+    "https://frontend-api-v3.pump.fun/*",
+    "https://api.dexscreener.com/*",
+    "https://api.geckoterminal.com/*",
+    "https://assets.geckoterminal.com/*",
+    "https://coin-images.coingecko.com/*",
+    "https://axiom.trade/*",
+    "https://*.axiom.trade/*",
+    "https://bundles.jito.wtf/*",
+    "https://translate.googleapis.com/*",
+    "https://api.anthropic.com/*",
+    "https://gmgn.ai/*",
+    "https://*.gmgn.ai/*",
+    "https://trade.padre.gg/*",
+    "https://*.padre.gg/*",
+    "https://bsc-rpc.publicnode.com/*",
+    "https://bsc-dataseed.bnbchain.org/*",
+    "https://bsc-dataseed1.defibit.io/*",
+    "https://rpc.48.club/*",
+    "https://puissant-builder.48.club/*",
+    "https://bsc.blockrazor.xyz/*",
+    "https://ger-bscscutum.blockrazor.xyz/*",
+    "https://bsc.rpc.blxrbdn.com/*",
+    "https://bscrpc.pancakeswap.finance/*",
+    "https://bsc.merkle.io/*",
+    "https://rpc.bsc.jetbldr.xyz/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://axiom.trade/*",
+        "https://*.axiom.trade/*",
+        "https://gmgn.ai/*",
+        "https://*.gmgn.ai/*",
+        "https://trade.padre.gg/*",
+        "https://*.padre.gg/*"
+      ],
+      "js": [
+        "early.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://axiom.trade/*",
+        "https://*.axiom.trade/*",
+        "https://gmgn.ai/*",
+        "https://*.gmgn.ai/*",
+        "https://trade.padre.gg/*",
+        "https://*.padre.gg/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_origin_as_fallback": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/logo.svg",
+        "icons/fav-32.png",
+        "icons/fav-48.png",
+        "fonts/medeo-latin.woff2",
+        "fonts/geist-latin.woff2",
+        "share/share.html",
+        "share/card/share-card.html",
+        "sounds/*"
+      ],
+      "matches": [
+        "https://axiom.trade/*",
+        "https://*.axiom.trade/*",
+        "https://gmgn.ai/*",
+        "https://*.gmgn.ai/*",
+        "https://trade.padre.gg/*",
+        "https://*.padre.gg/*"
+      ]
+    }
+  ]
+}

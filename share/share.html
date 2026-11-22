@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Share PnL · HAKI</title>
+<link rel="icon" href="../icons/fav-32.png">
+<link rel="stylesheet" href="share.css">
+</head>
+<body>
+<div class="s9" role="dialog" aria-label="Share PnL">
+  <div class="s9-hd"><span class="s9-t">Share PnL</span><span class="s9-coin" id="s9Coin"></span><span class="s9sp"></span>
+    <span class="s9-st" id="s9St"></span><button class="s9-x" data-s9="close" title="Close (Esc)" aria-label="Close"></button></div>
+  <div class="s9-pv"><iframe id="s9Fr" title="Card preview" scrolling="no"></iframe></div>
+  <div class="s9-ah"><span class="s9l">Art</span><span class="s9h" id="s9Ah"></span><span class="s9fmt s9still"><b></b>PNG · 2400×1350</span></div>
+  <div class="s9-arts" id="s9Arts"></div>
+  <div class="s9-foot"><div class="s9-bar">
+    <div class="s9seg" role="group" aria-label="Currency"><button data-s9u="usd">USD</button><button data-s9u="bnb">SOL</button></div>
+    <button class="s9sw" data-s9="hide" title="Show the % return only"><span class="s9kn"></span>Hide amounts</button>
+    <span class="s9sp"></span>
+    <button class="s9btn s9sec" data-s9="copy" title="Copy the card image"></button>
+    <button class="s9btn s9sec" data-s9="dl" id="s9Dl"></button>
+    <button class="s9btn s9pri" data-s9="x" id="s9X"></button>
+  </div><div class="s9-toast" id="s9Toast" hidden></div></div>
+</div>
+<script src="share.js"></script>
+</body>
+</html>

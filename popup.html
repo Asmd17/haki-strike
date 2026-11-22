@@ -1,0 +1,421 @@
+<!doctype html><html><head><meta charset="utf-8"><title>HAKI Strike settings</title>
+<style>
+/* 3.21.0 (owner: "the settings look cheap, make them neat and professional"): a real settings window. Sections on the left, one page
+   at a time on the right, the panel's own colours (graphite, HAKI red only on the chosen preset, green only for "on"), one type scale,
+   4 px grid, amounts typed like the panel's keys, a Save bar only when something changed. The toolbar popup (360 px) gets the same
+   pages with the sections as a row on top. */
+@font-face{font-family:HakiGeist;src:url(fonts/geist-latin.woff2) format("woff2");font-weight:100 900}
+@font-face{font-family:HakiMedeo;src:url(fonts/medeo-latin.woff2) format("woff2");font-weight:400 900}
+:root{--bg:#161821;--sb:#12141B;--cd:#1B1D26;--cd2:#20222C;--ln:#262935;--sep:#22252F;--fd:#12141B;--fdb:#2A2D39;--fdh:#363A48;
+  --t1:#EDEEF2;--t2:#A3A8B8;--t3:#6E7487;--t4:#4B5062;--up:#3DDC97;--on:#2FBF86;--dn:#FF5C78;--wn:#F5A524;--red:#E8132B}
+*{box-sizing:border-box;margin:0;font-family:HakiGeist,Geist,Inter,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+html{background:var(--bg);color-scheme:dark}
+body{width:360px;background:var(--bg);color:var(--t1);font-size:13px;line-height:18px;overflow-x:hidden}
+[hidden]{display:none!important}
+.sol{width:13px;height:13px;flex:none;vertical-align:-2px}
+svg.i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- side: brand, sections, balance ---------- */
+aside{background:var(--sb);display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;height:56px;padding:0 16px;flex:none}
+.brand img{width:22px;height:22px}
+.brand b{font:600 14px/18px HakiGeist,system-ui,sans-serif;letter-spacing:-.005em}
+.brand .ver{color:var(--t4);font-size:11px;font-variant-numeric:tabular-nums}
+nav{display:flex;flex-direction:column;gap:2px;padding:4px 8px 12px;overflow:auto}
+nav .gl{color:var(--t4);font-size:11px;line-height:14px;font-weight:500;padding:14px 10px 6px}
+nav .gl:first-child{padding-top:6px}
+nav button{all:unset;display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background-color .12s,color .12s}
+nav button svg{color:var(--t3);transition:color .12s}
+nav button:hover{background:#191B24;color:var(--t1)}
+nav button[aria-selected=true]{background:#22252F;color:var(--t1)}
+nav button[aria-selected=true] svg{color:var(--t1)}
+nav button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:-2px}
+.acct{margin-top:auto;padding:12px 16px 16px;border-top:1px solid var(--sep);display:grid;gap:2px}
+.acct span{color:var(--t3);font-size:11px;line-height:14px}
+.acct b{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.acct b:empty:before{content:"–";color:var(--t4);font-weight:500}
+
+/* ---------- page ---------- */
+main{padding:16px 16px 88px;min-width:0}
+.ph{margin-bottom:20px}
+.ph h1{font:600 19px/24px HakiMedeo,HakiGeist,system-ui,sans-serif;letter-spacing:.005em}
+.ph p{color:var(--t3);font-size:12.5px;line-height:18px;margin-top:4px;max-width:520px}
+section{margin-bottom:24px}
+section:last-child{margin-bottom:0}
+.sh{display:flex;align-items:center;gap:8px;min-height:28px;margin-bottom:8px}
+.sh h2{font-size:13px;line-height:18px;font-weight:600;color:var(--t1)}
+.sh .r{margin-left:auto;display:flex;gap:6px}
+.note{color:var(--t3);font-size:12px;line-height:17px;margin-top:8px}
+.n{color:var(--t3)}
+
+/* card of rows: text left, control right */
+.cd{background:var(--cd);border:1px solid var(--ln);border-radius:12px}
+.cd+.cd{margin-top:8px}
+.cd>*+*{border-top:1px solid var(--sep)}
+.row{display:flex;align-items:center;gap:16px;min-height:56px;padding:12px 16px}
+.row .l{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.row .l b{font-weight:500;font-size:13px;line-height:18px;color:var(--t1)}
+.row .l span{color:var(--t3);font-size:12px;line-height:16px}
+.row .ctl{flex:none;display:flex;align-items:center;gap:8px}
+.pad{display:grid;gap:12px;padding:16px}
+.rcv{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none;text-align:right}
+.rcv b{font-size:14px;line-height:18px;font-weight:600;color:var(--up);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rcv span{color:var(--t3);font-size:11.5px;font-variant-numeric:tabular-nums}
+.tool{flex-wrap:wrap}
+.tool .acts{display:flex;gap:6px;flex:none;margin-left:auto}
+
+/* fields */
+label{display:grid;gap:6px;min-width:0;color:var(--t2);font-size:12px;line-height:16px;font-weight:500}
+input,select,textarea{border-radius:8px;border:1px solid var(--fdb);background:var(--fd);color:var(--t1);font-size:13px;width:100%;outline:0;transition:border-color .12s,box-shadow .12s}
+input,select{height:34px;padding:0 12px}
+input:not([type]),input[inputmode]{font-variant-numeric:tabular-nums}
+input:hover,select:hover,textarea:hover{border-color:var(--fdh)}
+input:focus,select:focus,textarea:focus{border-color:#6E7487;box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+input::placeholder,textarea::placeholder{color:var(--t4)}
+textarea{display:block;padding:10px 12px;line-height:19px;resize:vertical;min-height:120px}
+select{padding:0 32px 0 12px;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236E7487' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:16px}
+.w-s{width:96px}.w-m{width:168px}.w-l{width:100%}
+/* a number with its unit inside the field */
+.in{position:relative;display:block}
+.in input{padding-right:46px;text-align:right}
+.in i{position:absolute;right:12px;top:0;bottom:0;display:flex;align-items:center;font-style:normal;color:var(--t3);font-size:12px;pointer-events:none}
+/* 4 amounts typed like the panel's keys */
+.mx{display:grid;grid-template-columns:repeat(4,64px);gap:6px}
+.mx input{padding:0 4px;text-align:center;font-weight:600;min-width:0;width:100%}   /* an input's own default width (20 characters) must not widen the window */
+.mx.b input{color:var(--up)}.mx.s input{color:var(--dn)}
+/* hotkey boxes: click, press a key */
+.hks{display:grid;grid-template-columns:repeat(4,40px);gap:6px}
+.hkk{all:unset;box-sizing:border-box;height:40px;border-radius:8px;border:1px solid var(--fdb);background:var(--fd);color:var(--t1);font:600 14px/1 HakiGeist,system-ui,sans-serif;text-align:center;cursor:pointer;box-shadow:inset 0 -2px 0 #232633;transition:border-color .12s,color .12s}
+.hkk:hover{border-color:var(--fdh)}.hkk:focus-visible,.hkk.rec{border-color:var(--t2);outline:0}.hkk.rec{color:var(--t3)}
+
+/* switches: green = on */
+input[type=checkbox]{appearance:none;flex:none;width:34px;height:20px;padding:0;border-radius:10px;background:var(--fdb);position:relative;cursor:pointer;border:0;transition:background-color .15s}
+input[type=checkbox]:after{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:var(--t2);transition:transform .15s cubic-bezier(.2,.8,.2,1),background-color .15s}
+input[type=checkbox]:checked{background:var(--on)}
+input[type=checkbox]:checked:after{transform:translateX(14px);background:#fff}
+label.k{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--t1);font-size:13px;font-weight:500;cursor:pointer}
+
+/* sliders */
+input[type=range]{appearance:none;height:20px;padding:0;background:none;border:0;width:160px;cursor:pointer;box-shadow:none}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--fdb)}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;background:#EDEEF2;box-shadow:0 1px 4px rgba(0,0,0,.6)}
+.val{min-width:40px;text-align:right;color:var(--t2);font-variant-numeric:tabular-nums;font-weight:500}
+
+/* buttons */
+button{height:34px;border:0;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;padding:0 14px;white-space:nowrap;transition:background-color .12s,color .12s,opacity .12s,transform .06s}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:default;transform:none}
+.pri{background:#EDEEF2;color:#111318}.pri:hover:not(:disabled){background:#fff}
+.sec{background:#252833;color:var(--t1);box-shadow:inset 0 0 0 1px #2E3240}.sec:hover:not(:disabled){background:#2B2F3B}
+.sm{height:30px;padding:0 12px;font-size:12.5px}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}
+
+.st{min-height:16px;font-size:12px;line-height:16px;color:var(--t2);margin-top:8px}.st:empty{display:none}
+.ok{color:var(--up)!important}.bad{color:var(--dn)!important}
+
+/* wallets */
+.wl:empty{display:none}
+.wi{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 8px 10px 16px}
+.wi+.wi{border-top:1px solid var(--sep)}
+.wi .av{width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;background:#262A36;color:var(--t2);font-size:12px;font-weight:600}
+.wi .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.wi .t b{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
+.wi .t i{font-style:normal;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:11px;color:var(--t3)}
+.wi .on{display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 7px;border-radius:9px;background:rgba(61,220,151,.1);font-size:11px;font-weight:500;color:var(--up)}
+.wi .on:before{content:"";width:5px;height:5px;border-radius:50%;background:var(--up)}
+.wi .s{margin-left:auto;display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}.wi .s.lk{color:var(--wn);font-weight:500;font-size:12px}
+.wi .rm{width:30px;height:30px;padding:0;display:grid;place-items:center;background:none;color:var(--t4);flex:none;opacity:0}
+.wi:hover .rm,.wi .rm:focus-visible{opacity:1}.wi .rm:hover{background:rgba(255,92,120,.12);color:var(--dn)}
+
+/* results table */
+.tbl .th,.tbl .tr{display:grid;grid-template-columns:96px 1fr;align-items:center}
+.tbl .th{min-height:36px;padding:0 16px}
+.tbl .th .hc{display:grid;grid-template-columns:repeat(3,1fr);color:var(--t3);font-size:12px;text-align:right}
+.tbl .tr{min-height:56px;padding:0 0 0 16px}
+.tbl .tl{color:var(--t2);font-weight:500}
+.sv{display:grid;grid-template-columns:repeat(3,1fr)}
+.sv>div,.sv>button{all:unset;display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:9px 16px 9px 0;min-width:0;text-align:right}
+.sv b{font-size:13px;font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums;white-space:nowrap}
+.sv span{color:var(--t3);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sv i{display:none}
+.sv.pv b.up{color:var(--up)}.sv.pv b.dn{color:var(--dn)}
+.sv.pv button{cursor:pointer;border-radius:8px;transition:background .12s}.sv.pv button:hover{background:rgba(255,255,255,.03)}
+.sv.pv button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:-2px}
+#savV b{color:var(--up)}
+
+/* presets: P1 P2 P3, the chosen one red like the panel's */
+.seg{display:inline-grid;grid-auto-flow:column;gap:2px;padding:3px;border-radius:10px;background:var(--fd);border:1px solid var(--fdb)}
+.seg button{all:unset;height:28px;min-width:44px;padding:0 10px;box-sizing:border-box;border-radius:7px;text-align:center;font:600 12.5px/28px HakiGeist,system-ui,sans-serif;color:var(--t3);cursor:pointer;transition:background-color .12s,color .12s}
+.seg button:hover{color:var(--t1)}
+.seg button[aria-pressed=true]{background:var(--red);color:#fff}
+.seg button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
+.pv2{display:grid;grid-template-columns:1fr 1fr}
+.pv2>div{padding:16px;display:grid;gap:12px;align-content:start}
+.pv2>div+div{border-left:1px solid var(--sep)}
+.pv2 h3{font-size:12px;line-height:16px;font-weight:600;color:var(--t2)}
+.pv2 h3.b{color:var(--up)}.pv2 h3.s{color:var(--dn)}
+
+/* save bar: only while something changed */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(27,29,38,.96);border-top:1px solid var(--ln);backdrop-filter:blur(12px);animation:barIn .18s cubic-bezier(.2,.8,.2,1)}
+@keyframes barIn{from{transform:translateY(100%)}to{transform:none}}
+.bar .st{flex:1;margin:0;color:var(--t2)}
+.bar .pri{min-width:96px}
+.done{position:fixed;right:16px;bottom:16px;z-index:6;display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:10px;background:#22252F;border:1px solid var(--ln);color:var(--t1);font-weight:500;box-shadow:0 12px 32px rgba(0,0,0,.45);animation:barIn .18s cubic-bezier(.2,.8,.2,1)}
+.done:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--up)}
+
+/* ---------- the narrow toolbar popup: sections as a row on top ---------- */
+html:not(.win) aside{position:sticky;top:0;z-index:4;border-bottom:1px solid var(--sep)}
+html:not(.win) .brand{height:48px}
+html:not(.win) nav{flex-direction:row;gap:4px;padding:0 8px 8px;overflow-x:auto;scrollbar-width:none}
+html:not(.win) nav::-webkit-scrollbar{display:none}
+html:not(.win) nav .gl{display:none}
+html:not(.win) nav button{height:30px;padding:0 10px;gap:6px;font-size:12.5px;flex:none}
+html:not(.win) .acct{display:none}
+html:not(.win) .brand #bal2{margin-left:auto;color:var(--t2);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+html:not(.win) .ph h1{font-size:17px;line-height:22px}
+html:not(.win),html:not(.win) body{width:360px;max-width:360px;overflow-x:hidden}
+html:not(.win) .mx{grid-template-columns:repeat(4,minmax(0,1fr));width:100%}
+html:not(.win) .row .ctl:has(.mx),html:not(.win) .row .ctl:has(.hks){flex:1 1 100%}
+html:not(.win) .row .ctl{max-width:100%}
+html:not(.win) .row{flex-wrap:wrap}
+html:not(.win) .pv2{grid-template-columns:1fr}
+html:not(.win) .pv2>div+div{border-left:0;border-top:1px solid var(--sep)}
+html.win body{width:auto}
+html.win .brand #bal2{display:none}
+html:not(.win) .tbl .th,html:not(.win) .tbl .tr{grid-template-columns:64px 1fr}
+/* ---------- the settings window ---------- */
+@media (min-width:640px){
+html.win body{width:auto;height:100vh;display:grid;grid-template-columns:216px 1fr;overflow:hidden}
+html.win aside{border-right:1px solid var(--sep);min-height:0}
+html.win .brand #bal2{display:none}
+html.win main{overflow-y:auto;padding:32px 40px 96px}
+html.win main>div{max-width:600px}
+html.win .bar{left:216px;padding:12px 40px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}button:active{transform:none}}
+</style></head><body>
+<aside>
+ <div class="brand"><img src="icons/logo.svg" alt=""><b>HAKI Strike</b><span class="ver" id="ver"></span><span id="bal2"></span></div>
+ <nav class="tabs" role="tablist" aria-label="Settings sections">
+  <div class="gl">Wallet</div>
+  <button role="tab" data-t="w" aria-selected="true"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 4.75h10.5v8.5H2.75zM2.75 4.75v-.5c0-.83.67-1.5 1.5-1.5h7"/><path d="M10.25 9h.75"/></svg>Wallets</button>
+  <button role="tab" data-t="r" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 13.25h10.5M4.5 10.5v1.25M7.25 7.75v4M10 9.25v2.5M12.75 4.75v7"/></svg>Results</button>
+  <button role="tab" data-t="x" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M10.3 2.85a3.1 3.1 0 0 0-3.85 3.9l-3.6 3.6a1.25 1.25 0 0 0 1.77 1.77l3.6-3.6a3.1 3.1 0 0 0 3.9-3.85L10.3 6.5l-1.6-.4-.4-1.6z"/></svg>Wallet tools</button>
+  <div class="gl">Trading</div>
+  <button role="tab" data-t="t" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M5 13V3M2.75 5.25 5 3l2.25 2.25M11 3v10M8.75 10.75 11 13l2.25-2.25"/></svg>Buy and sell</button>
+  <button role="tab" data-t="f" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M9 2.25 3.75 9h4.25L7.25 13.75 12.25 7H8z"/></svg>Speed and fees</button>
+  <button role="tab" data-t="k" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><rect x="1.75" y="4" width="12.5" height="8" rx="1.75"/><path d="M4.5 6.75h.01M6.85 6.75h.01M9.2 6.75h.01M11.5 6.75h.01M5.25 9.5h5.5"/></svg>Hotkeys</button>
+  <div class="gl">More</div>
+  <button role="tab" data-t="l" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M9.25 2.75c2.1.25 3.75 1.9 4 4L8.5 11.5 4.5 7.5z"/><path d="M4.5 7.5 2.75 7.2l1.9-2.05 2.6.2M8.5 11.5l.3 1.75 2.05-1.9-.2-2.6M3.25 12.75l1.25-.35.35-1.25"/></svg>Multi launch</button>
+  <button role="tab" data-t="c" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 6.25v3.5h2.25l4.75 3V3.25l-4.75 3z"/><path d="M12 6.1c.65.45 1.05 1.15 1.05 1.9s-.4 1.45-1.05 1.9M5 9.75l.7 3h1.55l-.5-2.75"/></svg>Callout</button>
+  <div class="gl">App</div>
+  <button role="tab" data-t="p" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 4.75h6M11.75 4.75h1.5M2.75 11.25h1.5M7.25 11.25h6"/><circle cx="10.25" cy="4.75" r="1.5"/><circle cx="5.75" cy="11.25" r="1.5"/></svg>Panel and sound</button>
+  <button role="tab" data-t="n" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M6 2.75v3M10 2.75v3M4.5 5.75h7v2.25a3.5 3.5 0 0 1-7 0zM8 11.5v1.75"/></svg>Connections</button>
+ </nav>
+ <div class="acct"><span>Trading balance</span><b id="bal"></b></div>
+</aside>
+<main>
+<!-- ============ Wallets ============ -->
+<div data-p="w">
+ <div class="ph"><h1>Wallets</h1><p>Your keys are sealed with your password and stay in this browser only.</p></div>
+ <section>
+  <div class="sh"><h2>Solana</h2><div class="r" id="wOpen" hidden><button class="sec sm" id="wAddBtn">Add wallet</button><button class="sec sm" id="oLock">Lock</button></div></div>
+  <div class="cd wl" id="wList"></div>
+  <div class="note" id="wHint" hidden>Tick the wallets that trade in the panel's wallet menu.</div>
+  <div class="cd pad" id="wLocked" hidden>
+   <label>Password<input id="uP" type="password" autocomplete="current-password"></label>
+   <label class="k">Stay unlocked on this PC<input type="checkbox" id="uKeep" checked></label>
+   <div class="note" style="margin:0">Stay unlocked = no password on this PC: anyone who uses your Windows account can trade. Lock asks for it again.</div>
+   <button class="pri" id="uGo">Unlock</button>
+  </div>
+  <div class="note" id="wKeep" hidden>Unlocked on this PC. Lock asks for the password again.</div>
+  <div class="cd pad" id="wNew" hidden>
+   <label>Wallet address<input id="iAddr" autocomplete="off" spellcheck="false" placeholder="Empty for a BSC key"></label>
+   <label>Private key<input id="iKey" type="password" autocomplete="off" spellcheck="false" placeholder="Solana or BSC (0x…) key"></label>
+   <label>Name<input id="iLabel" maxlength="24" placeholder="Optional" autocomplete="off"></label>
+   <div class="g" id="iPw"><label id="iP1l">New password<input id="iP1" type="password" autocomplete="new-password"></label><label id="iP2l">Repeat<input id="iP2" type="password" autocomplete="new-password"></label></div>
+   <label class="k" id="iKeepL">Stay unlocked on this PC<input type="checkbox" id="iKeep" checked></label>
+   <button class="pri" id="iGo">Add wallet</button>
+   <div class="note" id="iNote" style="margin:0">Sealed with your password, kept in this browser only.</div>
+  </div>
+  <div class="st" id="wst" role="status" aria-live="polite"></div>
+ </section>
+ <section>
+  <div class="sh"><h2>BSC</h2></div>
+  <div class="cd wl" id="bList"></div>
+  <div class="cd pad" id="bNew" hidden>
+   <label>BSC private key<input id="bKey" type="password" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+   <label id="bPl">Your HAKI Strike password<input id="bPass" type="password" autocomplete="current-password"></label>
+   <button class="pri" id="bGo">Add BSC wallet</button>
+   <div class="note" style="margin:0">Trades four.meme, Flap and PancakeSwap coins on GMGN, Terminal and Axiom.</div>
+  </div>
+  <div class="st" id="bst" role="status" aria-live="polite"></div>
+ </section>
+</div>
+
+<!-- ============ Results ============ -->
+<div data-p="r" hidden>
+ <div class="ph"><h1>Results</h1><p>Closed trades through the HAKI panel, after fees. Click a PnL cell to share it as a card.</p></div>
+ <section>
+  <div class="cd tbl">
+   <div class="th"><span></span><span class="hc"><span>Today</span><span>7 days</span><span>All time</span></span></div>
+   <div class="tr" id="pnlB"><span class="tl">PnL</span><div class="sv pv" id="pnlV"></div></div>
+   <div class="tr" id="sav"><span class="tl">Fees saved</span><div class="sv" id="savV"></div></div>
+   <div class="tr" id="volB"><span class="tl">Volume</span><div class="sv" id="volBV"></div></div>
+  </div>
+  <div class="note">In SOL. Fees saved: the 1% a terminal would have charged you.</div>
+ </section>
+</div>
+
+<!-- ============ Wallet tools ============ -->
+<div data-p="x" hidden>
+ <div class="ph"><h1>Wallet tools</h1><p>SOL that is yours but sits elsewhere: get it back in one click.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row tool"><span class="l"><b>Empty token accounts</b><span id="rcN">Each one holds ~0.002 SOL you can get back.</span></span><span class="rcv" id="rcV" hidden><b id="rcSol"></b><span id="rcUsd"></span></span><span class="acts"><button class="sec sm" id="rcScan">Check</button><button class="pri sm" id="rcGo" disabled>Get SOL back</button></span></div>
+   <div class="row tool"><span class="l"><b>Creator fees</b><span id="cfN">pump.fun pays the creator a share of every trade.</span></span><span class="rcv" id="cfV" hidden><b id="cfSol"></b><span id="cfUsd"></span></span><span class="acts"><button class="sec sm" id="cfScan">Check</button><button class="pri sm" id="cfGo" disabled>Claim</button></span></div>
+   <div class="row tool"><span class="l"><b>Trader cashback</b><span id="cbN">Cashback coins give the creator's fee back to the traders.</span></span><span class="rcv" id="cbV" hidden><b id="cbSol"></b><span id="cbUsd"></span></span><span class="acts"><button class="sec sm" id="cbScan">Check</button><button class="pri sm" id="cbGo" disabled>Claim</button></span></div>
+  </div>
+ </section>
+ <section id="mvBox" hidden>
+  <div class="sh"><h2>Move SOL between your wallets</h2></div>
+  <div class="cd pad">
+   <div class="g"><label>From<select id="mvFrom"></select></label><label>To<select id="mvTo"></select></label></div>
+   <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end"><label>Amount<span class="in"><input id="mvAmt" inputmode="decimal" placeholder="0.5"><i>SOL</i></span></label><button class="sec" id="mvMax" type="button">Max</button><button class="pri" id="mvGo">Move</button></div>
+  </div>
+ </section>
+ <div class="st" id="tst" role="status" aria-live="polite"></div>
+</div>
+
+<!-- ============ Buy and sell ============ -->
+<div data-p="t" data-save hidden>
+ <div class="ph"><h1>Buy and sell</h1><p>The amounts on the panel's keys. The extended panel's second row is set by editing it on the panel.</p></div>
+ <section>
+  <div class="sh"><h2>Solana</h2></div>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Buy</b><span>SOL per key</span></span><span class="ctl"><span class="mx b" data-for="buys" data-lo="0" data-hi="100"></span><input id="buys" hidden></span></div>
+   <div class="row"><span class="l"><b>Sell</b><span>% of the position per key</span></span><span class="ctl"><span class="mx s" data-for="sells" data-lo="0" data-hi="100"></span><input id="sells" hidden></span></div>
+   <div class="row"><span class="l"><b>Max per trade</b><span>A safety cap on any buy</span></span><span class="ctl"><span class="in w-m"><input id="maxSol" inputmode="decimal"><i>SOL</i></span></span></div>
+  </div>
+ </section>
+ <section>
+  <div class="sh"><h2>BSC</h2></div>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Buy</b><span>BNB per key</span></span><span class="ctl"><span class="mx b" data-for="bBuys" data-lo="0" data-hi="1000"></span><input id="bBuys" hidden></span></div>
+   <div class="row"><span class="l"><b>Max per trade</b><span>A safety cap on any BNB buy</span></span><span class="ctl"><span class="in w-m"><input id="maxBnb" inputmode="decimal" placeholder="2"><i>BNB</i></span></span></div>
+   <div class="row"><span class="l"><b>Slippage</b></span><span class="ctl"><span class="in w-m"><input id="bSlip" inputmode="decimal" placeholder="15"><i>%</i></span></span></div>
+   <div class="row"><span class="l"><b>Gas</b><span>0 = the network's price</span></span><span class="ctl"><span class="in w-m"><input id="bGwei" inputmode="decimal" placeholder="0"><i>gwei</i></span></span></div>
+  </div>
+ </section>
+ <section>
+  <div class="sh"><h2>Quick buy in lists</h2></div>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Quick buy button on cards</b><span>Buy straight from Pulse, Trenches and lists</span></span><span class="ctl"><input id="pulse" type="checkbox" aria-label="Quick buy button on cards"></span></div>
+   <div class="row"><span class="l"><b>Quick buy amount</b><span>When the site shows no amount</span></span><span class="ctl"><span class="in w-m"><input id="quick" inputmode="decimal"><i>SOL</i></span></span></div>
+  </div>
+ </section>
+</div>
+
+<!-- ============ Speed and fees ============ -->
+<div data-p="f" data-save hidden>
+ <div class="ph"><h1>Speed and fees</h1><p>Three presets, picked on the panel. Each one sets the slippage, priority fee and tip for buys and for sells.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Smart fees</b><span>Pay what the network needs now; the preset is the most you pay</span></span><span class="ctl"><select id="autoFee" aria-label="Smart fees" class="w-m"><option value="fast">Same speed</option><option value="eco">Cheapest</option><option value="off">Off</option></select></span></div>
+  </div>
+ </section>
+ <section>
+  <div class="sh"><h2>Presets</h2><div class="r"><div class="seg" id="pSeg" role="group" aria-label="Preset"><button type="button" data-i="0" aria-pressed="true">P1</button><button type="button" data-i="1" aria-pressed="false">P2</button><button type="button" data-i="2" aria-pressed="false">P3</button></div></div></div>
+  <div class="cd pset" data-i="0"><div class="pv2">
+   <div><h3 class="b">Buy</h3><label>Slippage<span class="in"><input id="s0" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="f0" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="t0" inputmode="decimal"><i>SOL</i></span></label></div>
+   <div><h3 class="s">Sell</h3><label>Slippage<span class="in"><input id="ss0" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="sf0" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="st0" inputmode="decimal"><i>SOL</i></span></label></div>
+  </div></div>
+  <div class="cd pset" data-i="1" hidden><div class="pv2">
+   <div><h3 class="b">Buy</h3><label>Slippage<span class="in"><input id="s1" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="f1" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="t1" inputmode="decimal"><i>SOL</i></span></label></div>
+   <div><h3 class="s">Sell</h3><label>Slippage<span class="in"><input id="ss1" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="sf1" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="st1" inputmode="decimal"><i>SOL</i></span></label></div>
+  </div></div>
+  <div class="cd pset" data-i="2" hidden><div class="pv2">
+   <div><h3 class="b">Buy</h3><label>Slippage<span class="in"><input id="s2" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="f2" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="t2" inputmode="decimal"><i>SOL</i></span></label></div>
+   <div><h3 class="s">Sell</h3><label>Slippage<span class="in"><input id="ss2" inputmode="decimal"><i>%</i></span></label><label>Priority fee<span class="in"><input id="sf2" inputmode="decimal"><i>SOL</i></span></label><label>Tip<span class="in"><input id="st2" inputmode="decimal"><i>SOL</i></span></label></div>
+  </div></div>
+  <div class="note">The tip (up to 0.01 SOL) goes to Helius Sender. From 0.001 SOL the trade goes to Jito and the fast SWQOS lanes at once; below that, SWQOS only.</div>
+ </section>
+</div>
+
+<!-- ============ Hotkeys ============ -->
+<div data-p="k" data-save hidden>
+ <div class="ph"><h1>Hotkeys</h1><p>Trade from the keyboard. They work only while the site's tab is in front and focused, never while you type, and never from a key held down.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>How you press them</b><span>A key alone, or with Space, Ctrl, Alt or Shift</span></span><span class="ctl"><select id="hkMod" aria-label="Hotkey mode" class="w-m"><option value="none">Q</option><option value="space">Space + Q</option><option value="ctrl">Ctrl + Q</option><option value="alt">Alt + Q</option><option value="shift">Shift + Q</option><option value="off">Off</option></select></span></div>
+   <div class="row"><span class="l"><b>Buy keys</b><span>The 4 buy amounts, left to right</span></span><span class="ctl"><span class="hks" data-for="hkBuy"></span><input id="hkBuy" hidden></span></div>
+   <div class="row"><span class="l"><b>Sell keys</b><span>The 4 sell amounts, left to right</span></span><span class="ctl"><span class="hks" data-for="hkSell"></span><input id="hkSell" hidden></span></div>
+  </div>
+  <div class="note">Click a box, then press your key: letters or digits. A key used twice swaps places. Backspace clears a box, Esc cancels.</div>
+ </section>
+</div>
+
+<!-- ============ Multi launch ============ -->
+<div data-p="l" hidden>
+ <div class="ph"><h1>Multi launch</h1><p>Copies of the coin you are on, about 0.006 SOL each. Changes here apply at once.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Launch wallet</b></span><span class="ctl"><select id="spamW" class="w-m"></select></span></div>
+   <div class="row"><span class="l"><b>Coins per click</b></span><span class="ctl"><select id="spamN" class="w-s"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></span></div>
+   <div class="row"><span class="l"><b>New wallet for each coin</b><span>Emptied back to the launch wallet</span></span><span class="ctl"><input id="spamFresh" type="checkbox" aria-label="New wallet for each coin"></span></div>
+   <div class="row" id="lwRow"><span class="l"><b>Claimed fees go to</b></span><span class="ctl"><select id="feeTo" class="w-m"></select></span></div>
+   <div class="row"><span class="l"><b>Creator fees</b><span id="lwInfo">Fees of these coins are claimed every 30 min</span></span><span class="ctl"><button type="button" id="lwGo" class="sec sm">Claim now</button></span></div>
+  </div>
+ </section>
+</div>
+
+<!-- ============ Callout ============ -->
+<div data-p="c" data-save hidden>
+ <div class="ph"><h1>Callout</h1><p>Posts from your pump.fun login in this Chrome. Log in on pump.fun once.</p></div>
+ <section>
+  <div class="sh"><h2>Saved texts</h2></div>
+  <textarea id="cTexts" rows="5" aria-label="Saved callout texts" placeholder="One text per line. ↻ in the panel puts the next one in."></textarea>
+ </section>
+ <section>
+  <div class="sh"><h2>Auto callout</h2></div>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Post a callout after my buy</b></span><span class="ctl"><input id="cAuto" type="checkbox" aria-label="Auto callout after my buy"></span></div>
+   <div class="row"><span class="l"><b>From</b><span>SOL bought within 10 minutes</span></span><span class="ctl"><span class="in w-m"><input id="cMin" inputmode="decimal"><i>SOL</i></span></span></div>
+  </div>
+ </section>
+</div>
+
+<!-- ============ Panel and sound ============ -->
+<div data-p="p" data-save hidden>
+ <div class="ph"><h1>Panel and sound</h1><p>Size applies at once. You can also drag the panel's edges: sides for width, top and bottom for height.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Panel size</b></span><span class="ctl"><input id="ui" type="range" min="0.75" max="1.5" step="0.05" aria-label="Panel size" data-now><span class="val" id="uiV"></span></span></div>
+   <div class="row"><span class="l"><b>Sounds</b><span>When a trade lands or fails</span></span><span class="ctl"><input type="checkbox" id="sound" aria-label="Sounds"></span></div>
+   <div class="row"><span class="l"><b>Volume</b></span><span class="ctl"><input id="vol" type="range" min="0" max="1" step="0.05" aria-label="Volume"><span class="val" id="volV"></span></span></div>
+  </div>
+ </section>
+</div>
+
+<!-- ============ Connections ============ -->
+<div data-p="n" data-save hidden>
+ <div class="ph"><h1>Connections</h1><p>All optional. Keys stay in this browser and go only to their own service.</p></div>
+ <section>
+  <div class="cd">
+   <div class="pad"><label>Jupiter API key<input id="jupKey" type="password" autocomplete="off" spellcheck="false" placeholder="Free at portal.jup.ag"></label></div>
+   <div class="pad"><label>Own Solana RPC<input id="rpc" placeholder="https://…" autocomplete="off" spellcheck="false"></label></div>
+  </div>
+ </section>
+ <section>
+  <div class="sh"><h2>Tweet translation</h2></div>
+  <div class="cd">
+   <div class="pad"><label>Anthropic API key<input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label></div>
+   <div class="row"><span class="l"><b>Model</b></span><span class="ctl"><select id="aiModel" style="width:240px"><option value="claude-opus-5-5">Claude Opus 5.5: best slang</option><option value="claude-haiku-5-5">Claude Haiku 5.5: fastest</option></select></span></div>
+  </div>
+  <div class="note">Tweets are translated by Google at once; with a key, Claude replaces it with a slang-aware translation.</div>
+ </section>
+</div>
+</main>
+<div class="bar" id="bar" hidden><div class="st" id="st" role="status" aria-live="polite">Unsaved changes</div><button class="sec" id="undo" type="button">Discard</button><button class="pri" id="save">Save</button></div>
+<script src="popup.js"></script></body></html>
