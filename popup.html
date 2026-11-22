@@ -164,26 +164,21 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .done{position:fixed;right:16px;bottom:16px;z-index:6;display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:10px;background:#22252F;border:1px solid var(--ln);color:var(--t1);font-weight:500;box-shadow:0 12px 32px rgba(0,0,0,.45);animation:barIn .18s cubic-bezier(.2,.8,.2,1)}
 .done:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--up)}
 
-/* ---------- the narrow toolbar popup: sections as a row on top ---------- */
-html:not(.win) aside{position:sticky;top:0;z-index:4;border-bottom:1px solid var(--sep)}
-html:not(.win) .brand{height:48px}
-html:not(.win) nav{flex-direction:row;gap:4px;padding:0 8px 8px;overflow-x:auto;scrollbar-width:none}
-html:not(.win) nav::-webkit-scrollbar{display:none}
-html:not(.win) nav .gl{display:none}
-html:not(.win) nav button{height:30px;padding:0 10px;gap:6px;font-size:12.5px;flex:none}
-html:not(.win) .acct{display:none}
-html:not(.win) .brand #bal2{margin-left:auto;color:var(--t2);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
-html:not(.win) .ph h1{font-size:17px;line-height:22px}
-html:not(.win),html:not(.win) body{width:360px;max-width:360px;overflow-x:hidden}
-html:not(.win) .mx{grid-template-columns:repeat(4,minmax(0,1fr));width:100%}
-html:not(.win) .row .ctl:has(.mx),html:not(.win) .row .ctl:has(.hks){flex:1 1 100%}
-html:not(.win) .row .ctl{max-width:100%}
-html:not(.win) .row{flex-wrap:wrap}
-html:not(.win) .pv2{grid-template-columns:1fr}
-html:not(.win) .pv2>div+div{border-left:0;border-top:1px solid var(--sep)}
+/* ---------- the toolbar popup (3.22.1, owner: "it should look like yours"): the same sections on the left, as big as Chrome allows a popup (800 x 600) ---------- */
+html:not(.win),html:not(.win) body{width:780px;max-width:780px;overflow:hidden}
+html:not(.win) body{height:580px;display:grid;grid-template-columns:200px 1fr}
+html:not(.win) aside{border-right:1px solid var(--sep);min-height:0}
+html:not(.win) .brand #bal2{display:none}
+html:not(.win) nav button{height:30px}
+html:not(.win) nav .gl{padding:8px 10px 4px}
+html:not(.win) .brand{height:52px}
+html:not(.win) .acct{padding:10px 16px 12px}
+html:not(.win) main{overflow-y:auto;padding:24px 28px 88px}
+html:not(.win) main>div{max-width:540px}
+html:not(.win) .bar{left:200px;padding:12px 28px}
+html:not(.win) .mx{grid-template-columns:repeat(4,60px)}
 html.win body{width:auto}
 html.win .brand #bal2{display:none}
-html:not(.win) .tbl .th,html:not(.win) .tbl .tr{grid-template-columns:64px 1fr}
 /* ---------- the settings window ---------- */
 @media (min-width:640px){
 html.win body{width:auto;height:100vh;display:grid;grid-template-columns:216px 1fr;overflow:hidden}
