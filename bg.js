@@ -35,7 +35,7 @@ chrome.runtime.onInstalled.addListener(async d => {
   } catch (_) {}
 });
 const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
-const DEF = { bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '', aiKey: '', aiModel: 'claude-opus-5-5',
+const DEF = { bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
   cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
@@ -62,30 +62,6 @@ async function pfElig(mint) {
   PFL.set(mint, { left, id: a.existingCalloutId || cr.existingCalloutId || '', t: Date.now() });
   if (a.existingCalloutId || a.verdict === 'EXISTING_CALLOUT' || cr.verdict === 'EXISTING_CALLOUT') return 'CALLED';
   return a.verdict || ((j.preflight && j.preflight.create) || {}).verdict || (r.ok ? 'UNKNOWN' : 'HTTP_' + r.status);
-}
-const TRS = new Map();   /* 3.10.3 text -> Russian */
-const TRA = new Map();   /* 3.12.0 model|text -> Russian by Claude */
-const AI_SYS = "You translate crypto-Twitter posts (Solana memecoin trading) into natural Russian, the way a Russian memecoin trader would say it. Output only the translation, nothing else. Keep tickers ($XYZ), coin and project names, @handles, numbers, links and emojis as they are. Slang: larp = фейк / наёбка; dev = дев (создатель монеты); to dev / devved a coin = задеплоить / создал монету (\"devved 500K\" = создал монету, которая дошла до 500K маркеткапа); jeet = паперхенд / слил; ape in = залететь; send it = в луну / качаем; rug = скам / раг; cto = CTO (комьюнити забрало монету); mc = маркеткап; ath = ATH; bullpost = буллпостить; callout = колл; kol = KOL / инфлюенсер; cabal = кабал (инсайдеры); bundle = бандл; snipers = снайперы; pvp = PvP; ngmi / wagmi as is; gm = гм; cooked = всё, конец; based = база; fud = FUD; degen = деген; bags = мешки / позиция; 10x = 10х. All caps in the original is emphasis, not names.";
-/* 3.11.9 (owner: "everything is larp" came out as "всё РИПП"): crypto-twitter slang is put in plain English first and ALL-CAPS text
-   lowered (Google misreads both: larp = role play, rug = carpet, ape = monkey, caps = names) */
-const SLANG = [
-  [/\bdev(?:v?ed|'d)\s+(\$?[\w]+)\s+to\s+(\$?\d[\d.,]*[kmb]?)/gi, 'launched the $1 coin, it went to $2 market cap'], [/\bdev(?:v?ed|'d)\b/gi, 'launched a coin'],
-  [/\bdevving\b/gi, 'launching coins'], [/\bbullposters?\b/gi, 'people posting hype'], [/\bbullposting\b/gi, 'posting hype'], [/\bcallouts?\b/gi, 'promo posts'],
-  [/\blarp(?:ing|ers?|ed)?\b/gi, 'fake'], [/\brug(?:ged|pull(?:ed)?|s)?\b/gi, 'scam'], [/\bjeeted\b/gi, 'dumped'], [/\bjeeting\b/gi, 'dumping'], [/\bjeets?\b/gi, 'paper hands'],
-  [/\bape[ds]? in\b/gi, 'buy in big'], [/\baping\b/gi, 'buying in big'], [/\bsend(?:ing)? it\b/gi, 'pump it'], [/\bsend(?:ing)? (?=\$?[a-z0-9]*coin\b)/gi, 'pump '],
-  [/\bcto\b/gi, 'community takeover'], [/\bngmi\b/gi, 'not going to make it'], [/\bwagmi\b/gi, 'we are all going to make it'],
-  [/\bfud(?:ding)?\b/gi, 'fear-mongering'], [/\bdegens?\b/gi, 'gamblers'], [/\bbags\b/gi, 'holdings'], [/\bmoon(?:ing|ed)?\b/gi, 'skyrocket'],
-  [/\blfg\b/gi, "let's go"], [/\bgm\b/gi, 'good morning'], [/\bgn\b/gi, 'good night'], [/\bkols?\b/gi, 'influencers'], [/\brekt\b/gi, 'wrecked'],
-  [/\bhodl(?:ing)?\b/gi, 'hold'], [/\bshill(?:ing|ed)?\b/gi, 'promote'], [/\bcooked\b/gi, 'finished'], [/\bcabal\b/gi, 'insider group'],
-  [/\bdyor\b/gi, 'do your own research'], [/\bnfa\b/gi, 'not financial advice'], [/\bath\b/gi, 'all-time high'], [/\bmc\b/gi, 'market cap'],
-  [/\bdev\b/gi, 'developer'], [/\bdevs\b/gi, 'developers'], [/\bpvp\b/gi, 'player vs player'], [/\bsnipers?\b/gi, 'snipers'], [/\bbundled?\b/gi, 'bundled'],
-  [/\brn\b/gi, 'right now'], [/\bngl\b/gi, 'not gonna lie'], [/\bfr\b/gi, 'for real'], [/\bidk\b/gi, "I don't know"],
-];
-function trPrep(t) {
-  const L = (t.match(/\p{L}/gu) || []), up = L.filter(c => c !== c.toLowerCase()).length;
-  if (L.length > 8 && up / L.length > 0.6) t = t.split(/(\s+)/).map(w => /^\$/.test(w) ? w : w.toLowerCase()).join('').replace(/(^|[.!?]\s+)(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
-  for (const [r, v] of SLANG) t = t.replace(r, v);
-  return t;
 }
 const PFL = new Map();   /* mint -> {left: create attempts pump.fun still allows, id: your callout on it} */
 const PFERR = { DUPLICATE_CALLOUT: 'you already called this coin: write the text and press Update', ATTEMPT_LIMIT: 'no updates left on this coin (pump.fun allows 3 per coin)', COOLDOWN: 'pump.fun cooldown: try again in a moment',
@@ -132,6 +108,7 @@ async function autoCallout(c, mint) {   /* after a buy through this panel: your 
   finally { CALLING.delete(mint); }
 }
 try { chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }); } catch (_) {}
+chrome.storage.local.remove(['aiKey', 'aiModel']).catch(() => {});   /* 3.22.3 (owner): tweet translation removed; a saved Anthropic key is wiped */
 
 /* 3.22.0 (owner: "an admin panel: how many users, what bugs; a Report button"): HAKI's own small stats server (Cloudflare).
    It gets ONLY: a random install ID (made here, not tied to you), the version, the site (axiom / gmgn / padre), the chain (sol / bsc),
@@ -148,9 +125,11 @@ async function iid() {
 const teleOn = async () => (await chrome.storage.local.get({ tele: true })).tele !== false;
 const apiPost = (p, o) => fetch(API + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o), signal: AbortSignal.timeout(8000) }).then(r => r.json()).catch(() => null);
 const osOf = () => { try { return String((navigator.userAgentData && navigator.userAgentData.platform) || '').slice(0, 16); } catch (_) { return ''; } };
+let PINGING = false;
 async function telePing(host, chain) {   /* at most every 6 h: counts you as active today */
-  if (!(await teleOn())) return; const { tping = 0 } = await chrome.storage.local.get({ tping: 0 }); if (Date.now() - tping < 6 * 3600e3) return;
-  await chrome.storage.local.set({ tping: Date.now() }); apiPost('/v1/ping', { id: await iid(), ver: VERS, host, chain, os: osOf() });
+  if (!(await teleOn()) || PINGING) return; const { tping2 = 0 } = await chrome.storage.local.get({ tping2: 0 }); if (Date.now() - tping2 < 6 * 3600e3) return;
+  /* 3.22.2: the time is kept only after the server said ok (a failed try, e.g. no internet, is tried again on the next coin) */
+  PINGING = true; try { const r = await apiPost('/v1/ping', { id: await iid(), ver: VERS, host, chain, os: osOf() }); if (r && r.ok) await chrome.storage.local.set({ tping2: Date.now() }); } finally { PINGING = false; }
 }
 /* errors: kept here (the last 20, for a report) and counted for the server in one batch a minute; your own typos are not bugs */
 const ERRS = [], EQ = new Map(); let eqT = 0, LHOST = 'other';
@@ -815,34 +794,6 @@ async function handle(m) {
       try { const r = await SOLX.claimCreator(SOLX.unb64(K[w.pub]), w.pub, url); out.sol += r.lamports / 1e9; out.n++; } catch (e) { out.errs.push(w.label + ': ' + String((e && e.message) || e).slice(0, 120)); }
     }
     return out;
-  }
-  if (m.op === 'tr') {   /* 3.10.3 a tweet in Russian: Google Translate's free endpoint (the same as its web widget), cached */
-    const t = String(a.text || '').slice(0, 4000); if (!t.trim()) return { text: '' };
-    const h = TRS.get(t); if (h) return { text: h };
-    const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: 'q=' + encodeURIComponent(trPrep(t)) });
-    if (!r.ok) throw new Error('translate HTTP ' + r.status);
-    const j = await r.json(), out = ((j && j[0]) || []).map(x => x && x[0] || '').join('');
-    TRS.set(t, out); if (TRS.size > 300) TRS.delete(TRS.keys().next().value);
-    return { text: out, from: j && j[2] };
-  }
-  if (m.op === 'trAi') {   /* 3.12.0 (owner: Google gets crypto slang wrong): Claude with the owner's own API key (Settings), short memecoin-slang prompt */
-    const key = String(c.aiKey || '').trim(), t = String(a.text || '').slice(0, 4000); if (!key || !t.trim()) return { text: '' };
-    const model = c.aiModel === 'claude-haiku-5-5' ? 'claude-haiku-5-5' : 'claude-opus-5-5', ck = model + '|' + t, h = TRA.get(ck); if (h) return { text: h };
-    { /* 3.21.5 security: at most 12 AI translations a minute and 400 a day (a page could otherwise spend your API key without limit) */
-      const now = Date.now(), day = new Date().toDateString(), { aiUse = {} } = await chrome.storage.session.get({ aiUse: {} });
-      const u = aiUse.d === day ? aiUse : { d: day, n: 0, m: [] }; u.m = (u.m || []).filter(x => now - x < 60000);
-      if (u.m.length >= 12 || u.n >= 400) return { text: '' };
-      u.m.push(now); u.n++; await chrome.storage.session.set({ aiUse: u }); }
-    const body = { model, max_tokens: 2000, output_config: { effort: 'low' }, system: AI_SYS, messages: [{ role: 'user', content: t }] };
-    const hd = { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-dangerous-direct-browser-access': 'true' };
-    if (model === 'claude-opus-5-5') { body.fallbacks = 'default'; hd['anthropic-beta'] = 'server-side-fallback-2026-07-01'; }   /* a declined request is re-run on a fallback model */
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: hd, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error('AI translation: ' + ((j.error && j.error.message) || 'HTTP ' + r.status).slice(0, 120));
-    if (j.stop_reason === 'refusal') return { text: '' };
-    const out = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
-    if (out) { TRA.set(ck, out); if (TRA.size > 300) TRA.delete(TRA.keys().next().value); }
-    return { text: out, ai: true };
   }
   if (m.op === 'og') {   /* 3.9.4 OG button: the first coin made with this name. 3.12.9: one lookup per coin for 3 min, started as the page
      opens (the button's own ask then gets the same answer); a failed lookup is not kept */

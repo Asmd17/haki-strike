@@ -33,7 +33,6 @@ The panel runs on axiom.trade, gmgn.ai and trade.padre.gg. These sites are treat
 - **Routes and prices:** Jupiter (lite-api.jup.ag / api.jup.ag), DexScreener, GeckoTerminal.
 - **BSC:** public BSC nodes, plus private relays (48 Club, BlockRazor, bloXroute, PancakeSwap, Merkle, Jetbldr) so trades skip the public mempool.
 - **Coin pictures:** IPFS gateways and pump.fun.
-- **Optional:** tweet translation through Google, or Anthropic if you add your own key.
 
 None of these ever receive a private key.
 

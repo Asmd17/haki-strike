@@ -1294,55 +1294,6 @@ button.c:active{transform:translateY(1px) scale(.985)}
   }
   if (HOST === 'axiom') setInterval(() => { try { mlMount(); } catch (_) {} }, 700);   /* 3.13.0: Axiom's header only for now */
 
-  /* 3.10.3 tweet cards in Russian (owner 1118: "auto-translate, right at the top"). Axiom's hover card of a tweet is a fixed popup
-     (div.pointer-events-auto.fixed) with the author header and the text in span[class*=break-words] (the tweet 18 px, a quoted one 16 px).
-     A block at the very top of the card shows the Russian text (Google Translate, through the worker), the card itself is untouched. */
-  const TRC = new Map(), cyr = t => (t.match(/[\u0400-\u04FF]/g) || []).length > t.replace(/\s/g, '').length * 0.4;
-  const trOne = t => send('tr', { text: t }).then(r => r && r.text ? r.text : null, () => null);
-  const TRAI = new Map();
-  const aiOf = t => { if (TRAI.has(t)) return TRAI.get(t); const p = send('trAi', { text: t }).then(r => r && r.text ? r.text : null, () => null).then(x => { if (!x) TRAI.delete(t); return x; }); TRAI.set(t, p); if (TRAI.size > 300) TRAI.delete(TRAI.keys().next().value); return p; };
-  const trOf = t => {   /* one retry after 0.8 s; a failure is not cached, the next hover asks again */
-    if (TRC.has(t)) return TRC.get(t);
-    const p = trOne(t).then(x => x || new Promise(z => setTimeout(z, 800)).then(() => trOne(t))).then(x => { if (!x) TRC.delete(t); return x; });
-    TRC.set(t, p); if (TRC.size > 300) TRC.delete(TRC.keys().next().value); return p;
-  };
-  /* 3.10.5 (owner: "neater, not right at the top like that"): the translation sits under the author, right above the tweet text, in a
-     quiet inset; links are left out of it (they stay in the original below, Google mangled "status" into Russian) */
-  const LINKS = /(https?:\/\/\S+|\b(?:x|twitter|t|youtube|youtu|tiktok|instagram|pump|dexscreener)\.(?:com|co|be|fun)\/\S*|\b[\w-]+\.(?:com|io|xyz|fun|gg|org|net|app|co|me)\/\S+)/gi;
-  const trIn = t => t.replace(LINKS, '').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  /* 3.11.5 (owner: "still crooked, look at the original"): like the tweet itself, each text gets its own translation right above it:
-     the tweet's above the tweet, a quoted tweet's inside the quoted card. No shared box, no label, no arrow glyph (the font had none). */
-  function trScan() {
-    for (const pop of document.querySelectorAll('body > div')) {   /* the card's wrapper is a classless fixed div right under body */
-      /* 3.12.1 cheap checks first: the page root is a body child too and its whole text was read here many times a second (slow pages) */
-      if (pop.id === 'haki-ax' || getComputedStyle(pop).position !== 'fixed' || pop.getBoundingClientRect().width > 900 || !pop.querySelector('span[class*="break-words"]') || !/followers|Joined/.test(pop.textContent || '')) continue;
-      if (!TRW.has(pop)) { TRW.add(pop); new MutationObserver(trSoon).observe(pop, { childList: true, subtree: true, characterData: true }); }   /* the card's own text arriving */
-      for (const old of pop.querySelectorAll('[data-hk-tr]')) { const nx = old.nextElementSibling; if (!nx || !nx.matches('span[class*="break-words"]')) old.remove(); }
-      for (const sp of pop.querySelectorAll('span[class*="break-words"]')) {
-        const t = trIn(sp.innerText || sp.textContent || ''); let box = sp.previousElementSibling; if (box && !box.hasAttribute('data-hk-tr')) box = null;
-        if (t.length < 2 || !/\p{L}/u.test(t) || cyr(t)) { if (box) box.remove(); continue; }
-        if (box && box.dataset.k === t) continue;
-        if (!box) {
-          box = document.createElement('div'); box.setAttribute('data-hk-tr', '');
-          const big = parseFloat(getComputedStyle(sp).fontSize) >= 17;
-          box.style.cssText = 'box-sizing:border-box;width:100%;margin:0 0 6px;padding:0 0 0 10px;border-left:2px solid rgba(29,155,240,.75);color:#E7E9EA;'
-            + 'font:400 ' + (big ? 16 : 14) + 'px/1.4 HakiGeist,Geist,"Segoe UI",system-ui,sans-serif;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;text-align:left';
-          sp.before(box);
-        }
-        box.dataset.k = t; box.textContent = '…'; box.style.color = '#8B98A6';
-        trOf(t).then(x => { if (!box.isConnected || box.dataset.k !== t) return; if (!x) { if (!box.dataset.ai) box.remove(); return; } if (box.dataset.ai) return; box.style.color = '#E7E9EA'; box.textContent = x; });
-        /* 3.12.0 with an AI key in Settings: Google's text shows at once, Claude's replaces it when it arrives (knows memecoin slang) */
-        aiOf(t).then(x => { if (!x || !box.isConnected || box.dataset.k !== t) return; box.dataset.ai = '1'; box.style.color = '#E7E9EA'; box.textContent = x; });
-      }
-    }
-  }
-  const TRW = new WeakSet(); let trT = 0;
-  function trSoon() { if (!trT) trT = setTimeout(() => { trT = 0; try { trScan(); } catch (_) {} }, 80); }
-  if (window.top === window && HOST === 'axiom') {   /* 3.13.0: Axiom's tweet cards only */
-    /* 3.12.1 (owner: pages load very slowly): only body's own children are watched (a hover card is one), not every price tick on the page */
-    new MutationObserver(trSoon).observe(document.body || document.documentElement, { childList: true });
-  }
-
   /* Axiom's own windows (image viewer, dialogs, menus over the whole page) cover the page: the panel steps aside while one is open
      and comes back when it closes. A window = a fixed element over most of the screen that was not part of the page when it loaded. */
   const BASE = new WeakSet(); let covered = false, baseAt = 0, qPath = location.pathname;
