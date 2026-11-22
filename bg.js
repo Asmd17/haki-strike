@@ -133,6 +133,37 @@ async function autoCallout(c, mint) {   /* after a buy through this panel: your 
 }
 try { chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }); } catch (_) {}
 
+/* 3.22.0 (owner: "an admin panel: how many users, what bugs; a Report button"): HAKI's own small stats server (Cloudflare).
+   It gets ONLY: a random install ID (made here, not tied to you), the version, the site (axiom / gmgn / padre), the chain (sol / bsc),
+   error texts with every address, signature and number removed, and the reports you write. Never a wallet, key, balance or trade.
+   Settings -> Report a problem -> "Anonymous stats" turns the automatic part off. If the server is down nothing waits for it. */
+const API = 'https://haki-strike-api.strike-api.workers.dev', VERS = chrome.runtime.getManifest().version;
+const scrubT = s => String(s == null ? '' : s).slice(0, 400).replace(/0x[0-9a-fA-F]{20,}/g, '‹0x›').replace(/[1-9A-HJ-NP-Za-km-z]{32,90}/g, '‹addr›').replace(/\d+(\.\d+)?/g, '#');
+const hostOf = u => /axiom\.trade/.test(u) ? 'axiom' : /gmgn\.ai/.test(u) ? 'gmgn' : /padre\.gg/.test(u) ? 'padre' : /^chrome-extension:/.test(u) ? 'popup' : 'other';
+async function iid() {
+  let { iid = '' } = await chrome.storage.local.get({ iid: '' });
+  if (!/^[a-z0-9]{16,40}$/.test(iid)) { iid = [...crypto.getRandomValues(new Uint8Array(12))].map(x => x.toString(16).padStart(2, '0')).join(''); await chrome.storage.local.set({ iid }); }
+  return iid;
+}
+const teleOn = async () => (await chrome.storage.local.get({ tele: true })).tele !== false;
+const apiPost = (p, o) => fetch(API + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o), signal: AbortSignal.timeout(8000) }).then(r => r.json()).catch(() => null);
+const osOf = () => { try { return String((navigator.userAgentData && navigator.userAgentData.platform) || '').slice(0, 16); } catch (_) { return ''; } };
+async function telePing(host, chain) {   /* at most every 6 h: counts you as active today */
+  if (!(await teleOn())) return; const { tping = 0 } = await chrome.storage.local.get({ tping: 0 }); if (Date.now() - tping < 6 * 3600e3) return;
+  await chrome.storage.local.set({ tping: Date.now() }); apiPost('/v1/ping', { id: await iid(), ver: VERS, host, chain, os: osOf() });
+}
+/* errors: kept here (the last 20, for a report) and counted for the server in one batch a minute; your own typos are not bugs */
+const ERRS = [], EQ = new Map(); let eqT = 0, LHOST = 'other';
+const USERERR = /not enough|hold none|nothing to sell|above your|password|choose|pick a|tick the|is locked|no wallet|unlock|already added|at least|too little|cancel/i;
+function teleErr(kind, msg) {
+  const m = scrubT(msg); if (!m || USERERR.test(m)) return;
+  ERRS.push({ t: Date.now(), kind, msg: m }); if (ERRS.length > 20) ERRS.shift();
+  const k = kind + '|' + m, x = EQ.get(k); if (x) x.n++; else if (EQ.size < 20) EQ.set(k, { kind, msg: m, n: 1 });
+  if (!eqT) eqT = setTimeout(async () => { eqT = 0; const list = [...EQ.values()]; EQ.clear(); if (list.length && await teleOn()) apiPost('/v1/err', { id: await iid(), ver: VERS, host: LHOST, list }); }, 60000);
+}
+self.addEventListener('unhandledrejection', e => teleErr('worker', (e.reason && (e.reason.message || e.reason)) || 'rejection'));
+self.addEventListener('error', e => teleErr('worker', e.message || 'error'));
+
 async function cfg() {
   const c = Object.assign({}, DEF, await chrome.storage.local.get(DEF));
   c.cTexts = (Array.isArray(c.cTexts) ? c.cTexts : []).filter(t => t && t !== 'Looks good, aiming for 2x');   /* the old built-in sample text is not yours: dropped */
@@ -653,11 +684,22 @@ async function handle(m) {
   }
   if (m.op === 'calloutCheck') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint), v = await pfElig(mint); return { v, left: (PFL.get(mint) || {}).left || 0 }; }
   if (m.op === 'callout') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint);   /* 3.14.3: pump.fun takes BSC coins by their 0x address (x2 boost) */ return pfCallout(mint, a.text, 45000, !!a.update); }
+  if (m.op === 'report') {   /* 3.22.0: Settings -> Report a problem */
+    const text = String(a.text || '').trim().slice(0, 2000); if (text.length < 3) throw new Error('write what happened');
+    const W = await walletsAll(), BW = await bwalletsAll(), p = (c.presets || [])[c.preset || 0] || {};
+    const ctx = { ver: VERS, os: osOf(), lang: (navigator.language || '').slice(0, 8), site: LHOST, wallets: W.length, bsc: BW.length > 0, preset: (c.preset || 0) + 1,
+      slip: p.slip, prio: p.prio, tip: p.tip, smartFees: c.autoFee, hotkeys: c.hk ? c.hkMod : 'off', ownRpc: !!c.rpc, jupKey: !!c.jupKey, pz: c.pz,
+      recentErrors: ERRS.slice(-10).map(e => ({ ago: Math.round((Date.now() - e.t) / 1000) + 's', kind: e.kind, msg: e.msg })) };
+    const r = await apiPost('/v1/report', { id: await iid(), ver: VERS, host: 'popup', chain: BW.length && !W.length ? 'bsc' : 'sol', text, ctx });
+    if (!r) throw new Error('could not reach the HAKI server: check the internet and try again');
+    if (!r.ok) throw new Error(r.why || 'not sent'); return { ok: true, n: r.n };
+  }
   if (m.op === 'openSettings') {   /* a small window of its own next to the page (not a tab; it stays open while you copy a key from your wallet) */
-    if (SET_WIN != null) { try { await chrome.windows.update(SET_WIN, { focused: true }); return { ok: true }; } catch (_) { SET_WIN = null; } }
+    if (a.report) await chrome.storage.session.set({ repText: String(a.report).slice(0, 300) });   /* 3.22.0: the toast's Report opens the report page with the error */
+    if (SET_WIN != null) { try { await chrome.windows.update(SET_WIN, { focused: true }); if (a.report) chrome.runtime.sendMessage({ hkRep: 1 }).catch(() => {}); return { ok: true }; } catch (_) { SET_WIN = null; } }
     let W = 880, H = 680, left, top;   /* 3.21.0: the settings window (sections on the left) */
     try { const cur = await chrome.windows.getLastFocused(); W = Math.min(W, Math.max(400, cur.width - 48)); H = Math.min(H, Math.max(480, cur.height - 96)); left = Math.max(0, cur.left + cur.width - W - 24); top = Math.max(0, cur.top + 72); } catch (_) {}
-    const w = await chrome.windows.create({ url: chrome.runtime.getURL('popup.html?win=' + (a.add ? 'add' : '1')), type: 'popup', width: W, height: H, left, top, focused: true });
+    const w = await chrome.windows.create({ url: chrome.runtime.getURL('popup.html?win=' + (a.add ? 'add' : a.report ? 'rep' : '1')), type: 'popup', width: W, height: H, left, top, focused: true });
     SET_WIN = w.id; return { ok: true };
   }
   if (m.op === 'import') {   /* popup only (see the sender check). A second wallet needs the same password as the first. */
@@ -890,7 +932,7 @@ async function handle(m) {
     const x = RB.get(a.sig);
     if (r.st === 'pending') { if (x && Date.now() - x.t < 25000 && Date.now() - x.last > (Date.now() - x.t < 3000 ? 400 : 1500)) { x.last = Date.now(); SOLX.sendFast(x.tx64, rpcUrl(c), x.sender).catch(() => {}); } return r; }
     if (r.st === 'failed') {
-      r.why = SOLX.whyFailed(r.err);
+      r.why = SOLX.whyFailed(r.err); teleErr('tx_fail', r.why);
       /* one automatic second try: price moved past the slippage -> again with 1.5x the slippage (max 50 %); the curve migrated on the
          way -> again through its pool. Only after the chain says the first one FAILED, so it can never fill twice. */
       if (x && x.o && !x.retried) {
@@ -1117,7 +1159,8 @@ chrome.runtime.onConnect.addListener(port => {
   };
   port.resub = () => { if (!S.a) return; stop(); const g = ++S.gen; start(g).catch(e => { if (g === S.gen) post({ err: String((e && e.message) || e) }); }); };
   port.ledger = async () => { if (!S.mint) return; S.L = await ledOf(S.mint, S.pubs); if (S.st) paint(); else port.resub(); };
-  port.onMessage.addListener(m => { if (!m || m.op !== 'watch') return; S.a = m.a || null; S.isMint = !!m.isMint; if (S.a) port.resub(); else { S.gen++; stop(); } });
+  port.onMessage.addListener(m => { if (!m || m.op !== 'watch') return; S.a = m.a || null; S.isMint = !!m.isMint;
+    if (S.a) { const h = hostOf((port.sender && port.sender.url) || ''); LHOST = h; telePing(h, /^0x/i.test(S.a) ? 'bsc' : 'sol').catch(() => {}); } if (S.a) port.resub(); else { S.gen++; stop(); } });
   LIVE.ports.add(port);
   port.onDisconnect.addListener(() => { LIVE.ports.delete(port); S.gen++; stop(); if (!LIVE.ports.size && LIVE.ws) { try { LIVE.ws.close(); } catch (_) {} LIVE.ws = null; } });
 });
@@ -1136,6 +1179,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
   if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
-  handle(m).then(reply, e => reply({ err: String((e && e.message) || e).slice(0, 220) }));
+  if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
+  handle(m).then(reply, e => { const t = String((e && e.message) || e).slice(0, 220); if (!['tx', 'wallets', 'cfg', 'pos', 'coin'].includes(m.op)) teleErr(m.op, t); reply({ err: t }); });
   return true;
 });

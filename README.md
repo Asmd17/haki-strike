@@ -10,7 +10,7 @@ The extension holds your wallets, so you should be able to see what it does with
 
 - Your private keys are encrypted with your password and never leave your browser.
 - Trades are signed on your own PC. Only the signed transaction goes to the network.
-- There is no HAKI backend that could leak or lose your keys.
+- No HAKI server sits between you and the chain. The only HAKI service is an anonymous stats counter, and it never gets wallet data. Its code is in `server/`.
 
 See [SECURITY.md](SECURITY.md) for exactly how it works and where to check each point in the code.
 
@@ -35,6 +35,7 @@ See [SECURITY.md](SECURITY.md) for exactly how it works and where to check each 
 - `content.js`, `early.js`: the panel on the page, quick buy and hotkeys.
 - `popup.html`, `popup.js`: the settings window.
 - `share/`: the PnL card.
+- `server/`: the anonymous stats and reports service (Cloudflare Worker).
 
 ## License
 

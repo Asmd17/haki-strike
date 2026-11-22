@@ -237,6 +237,8 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .msg.on{opacity:1;transform:none;pointer-events:auto}
 .msg.ok{color:#EDEEF0}.msg.ok:before{background:#37D399}.msg.bad{color:#FFB3BC}.msg.bad:before{background:#F0596B}
 .msg span{overflow:hidden;text-overflow:ellipsis}
+.msg .rpt{flex:none;height:20px;margin-right:-4px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#EDEEF0;font:600 11px/20px HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
+.msg .rpt:hover{background:rgba(255,255,255,.12)}
 .updb{display:none;width:calc(100% - 24px);height:28px;margin:0 12px 10px;border-radius:8px;background:#1C1D21;color:#EDEEF0;font-weight:600}.updb.on{display:block}.updb:hover{background:#26282D}
 .p>.side:last-of-type,.sc{margin-bottom:0}
 /* edit mode: the 8 amounts as fields */
@@ -503,7 +505,10 @@ button.c:active{transform:translateY(1px) scale(.985)}
     clearTimeout(sT); S.title = t || '';
     if (!t || P.hidden) { S.className = 'msg' + (k ? ' ' + k : ''); return; }
     const short = String(t).split(' · ')[0].replace(/\s*\((?:sent|ready|not ready|quoted)[^)]*\)/g, '').replace(/;.*$/, '');
-    S.innerHTML = '<span></span>'; S.firstChild.textContent = short; S.className = 'msg on' + (k ? ' ' + k : ''); toastAt();
+    S.innerHTML = '<span></span>'; S.firstChild.textContent = short; S.className = 'msg on' + (k ? ' ' + k : '');
+    if (k === 'bad') { const b = document.createElement('button'); b.className = 'rpt'; b.type = 'button'; b.textContent = 'Report'; b.title = 'Tell HAKI about this problem';
+      b.onclick = e => { e.stopPropagation(); if (e.isTrusted) send('openSettings', { report: String(t).slice(0, 300) }); }; S.appendChild(b); }   /* 3.22.0 */
+    toastAt();
     sT = setTimeout(() => { S.classList.remove('on'); }, k === 'ok' ? 3500 : k === 'bad' ? 8000 : 20000);
   };
   let nBuy = 0, selling = false;   /* buys run side by side (every click is a buy); a sell blocks the sell buttons until it is back */

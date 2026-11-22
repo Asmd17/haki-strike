@@ -4,7 +4,7 @@ HAKI Strike trades from your own wallets. This page explains where your keys liv
 
 ## Your keys never leave your browser
 
-- **No HAKI server.** The extension has no backend. There is no HAKI account, no login, and no HAKI server that could store or see a key. You can check this in the list of addresses the code talks to, below.
+- **No HAKI server in your trades.** There is no HAKI account and no login. Trades go from your browser straight to the network; no HAKI server could store or see a key. The only HAKI server is a small stats service (see "Anonymous stats" below), and it never receives anything about your wallets.
 - **Sealed with your password.** When you add a wallet, its private key is encrypted with AES-256-GCM. The encryption key comes from your password through PBKDF2-SHA256 with 600,000 rounds and a random salt for each wallet. Only this sealed copy is stored, in `chrome.storage.local` (see `core.js`: `seal` and `unseal`).
 - **Unlocked keys stay inside the extension.** After you unlock, the keys are kept in `chrome.storage.session`, which is set to trusted extension pages only (`bg.js`: `setAccessLevel('TRUSTED_CONTEXTS')`). Websites and the panel's page script cannot read it. It is cleared when Chrome closes or when you press Lock.
 - **"Stay unlocked on this PC"** keeps an encrypted copy so you do not type the password after a restart. That copy is protected by a key tied to this browser profile, not by your password, so anyone who uses your Windows account can trade. Leave it off on shared computers.
@@ -36,6 +36,17 @@ The panel runs on axiom.trade, gmgn.ai and trade.padre.gg. These sites are treat
 - **Optional:** tweet translation through Google, or Anthropic if you add your own key.
 
 None of these ever receive a private key.
+
+## Anonymous stats and reports
+
+So we can count users and fix bugs, the extension talks to one HAKI service (`haki-strike-api.strike-api.workers.dev`, a Cloudflare Worker; its full source is in `server/`). It receives only:
+
+- a random install ID made by the extension (not linked to you, your wallets or your browser account);
+- the version, the site (Axiom, GMGN or Terminal) and the chain (SOL or BNB);
+- error texts, with every address, signature and number removed before they leave your PC (`bg.js`: `scrubT`);
+- reports you choose to send from Settings → Report a problem. These include your text, your settings (presets, hotkey mode, number of wallets) and the last error texts.
+
+It never receives a wallet address, key, balance, amount or trade. You can turn the automatic part off: Settings → Report a problem → Anonymous stats. Trading does not depend on this service; if it is down, nothing waits for it.
 
 ## Check the installed version yourself
 

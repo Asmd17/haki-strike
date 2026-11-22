@@ -212,6 +212,7 @@ html.win .bar{left:216px;padding:12px 40px}
   <div class="gl">App</div>
   <button role="tab" data-t="p" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 4.75h6M11.75 4.75h1.5M2.75 11.25h1.5M7.25 11.25h6"/><circle cx="10.25" cy="4.75" r="1.5"/><circle cx="5.75" cy="11.25" r="1.5"/></svg>Panel and sound</button>
   <button role="tab" data-t="n" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M6 2.75v3M10 2.75v3M4.5 5.75h7v2.25a3.5 3.5 0 0 1-7 0zM8 11.5v1.75"/></svg>Connections</button>
+  <button role="tab" data-t="h" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M3.25 13.25V3.5c0-.41.34-.75.75-.75h8.25L10.5 6l1.75 3.25H4"/></svg>Report a problem</button>
  </nav>
  <div class="acct"><span>Trading balance</span><b id="bal"></b></div>
 </aside>
@@ -414,6 +415,22 @@ html.win .bar{left:216px;padding:12px 40px}
    <div class="row"><span class="l"><b>Model</b></span><span class="ctl"><select id="aiModel" style="width:240px"><option value="claude-opus-5-5">Claude Opus 5.5: best slang</option><option value="claude-haiku-5-5">Claude Haiku 5.5: fastest</option></select></span></div>
   </div>
   <div class="note">Tweets are translated by Google at once; with a key, Claude replaces it with a slang-aware translation.</div>
+ </section>
+</div>
+
+<!-- ============ Report a problem ============ -->
+<div data-p="h" hidden>
+ <div class="ph"><h1>Report a problem</h1><p>Tell us what went wrong. It goes straight to the HAKI team.</p></div>
+ <section>
+  <textarea id="repText" rows="7" maxlength="2000" aria-label="What happened" placeholder="What did you do, what did you expect, what happened instead? Which coin page, if it matters."></textarea>
+  <div class="note">Sent with it: the version, your settings (presets, hotkey mode, number of wallets) and the last errors, with every address and amount removed. Never a wallet, key or balance.</div>
+  <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="pri" id="repGo" type="button">Send report</button></div>
+  <div class="st" id="repSt" role="status" aria-live="polite"></div>
+ </section>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Anonymous stats</b><span>A random install ID, the version, the site and error texts, so we see how many use HAKI Strike and what breaks</span></span><span class="ctl"><input id="tele" type="checkbox" aria-label="Anonymous stats" data-now></span></div>
+  </div>
  </section>
 </div>
 </main>

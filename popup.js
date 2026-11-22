@@ -253,6 +253,21 @@ $('save').onclick = async () => {
   saved(); load();
 };
 $('undo').onclick = async () => { await load(); dirty(false); };
+/* 3.22.0 Report a problem */
+$('repGo').onclick = async () => {
+  const t = $('repText').value.trim(); if (t.length < 3) { say('repSt', 'Write what happened first', 'bad'); return; }
+  $('repGo').disabled = true; say('repSt', 'Sending…');
+  const r = await ask('report', { text: t }); $('repGo').disabled = false;
+  if (!r || r.err) { say('repSt', (r && r.err) || 'not sent', 'bad'); return; }
+  $('repText').value = ''; say('repSt', 'Sent' + (r.n ? ' as report #' + r.n : '') + '. Thank you, we will look at it.', 'ok');
+};
+chrome.storage.local.get({ tele: true }).then(o => { $('tele').checked = o.tele !== false; });
+$('tele').onchange = () => chrome.storage.local.set({ tele: $('tele').checked });
+async function repFill() {   /* opened from an error's Report button: the error is in the text already */
+  const { repText = '' } = await chrome.storage.session.get({ repText: '' }).catch(() => ({})); if (!repText) return;
+  await chrome.storage.session.remove('repText'); tab('h'); $('repText').value = 'What happened:\n\n\nError shown: ' + repText; $('repText').focus(); $('repText').setSelectionRange(15, 15);
+}
+chrome.runtime.onMessage.addListener(m => { if (m && m.hkRep) repFill(); });
 load();
 /* Panel size applies at once (the open Axiom tab redraws), no Save needed */
 $('ui').oninput = () => { const v = +$('ui').value; $('uiV').textContent = Math.round(v * 100) + '%'; chrome.storage.local.set({ pz: v }); };
@@ -267,6 +282,7 @@ function tab(t) {
 TABS.forEach(b => { b.onclick = () => tab(b.dataset.t); });
 let T0 = 'w'; try { T0 = localStorage.getItem('hkTab') || 'w'; } catch (_) {}
 tab(WIN === 'add' || !TABS.some(b => b.dataset.t === T0) ? 'w' : T0);
+if (WIN === 'rep') repFill();
 $('vol').addEventListener('input', () => { $('volV').textContent = Math.round($('vol').value * 100) + '%'; });
 $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 
