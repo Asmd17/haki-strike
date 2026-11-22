@@ -116,14 +116,26 @@ const BSC = (() => {
     if (r.route === 'pancake_v2' || r.route === 'pancake_v2q') return w[w.length - 1];
     return w[0];
   }
-  async function quote(r, side, amt) {
+  async function quote(r, side, amt, urls) {
     if (r.route === 'four_x') {   /* BNB -> quote on PancakeSwap V2, then the curve (Helper3 tryBuy / trySell); sells the other way */
-      if (side === 'buy') { const q = await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [amt, [C.WBNB, r.quote]]) }, 'latest']), qw = words(q); const qa = qw[qw.length - 1] || 0n;
-        const t = words(await rpc('eth_call', [{ to: C.HELPER, data: E.call('tryBuy(address,uint256,uint256)', [r.token, 0, qa]) }, 'latest'])); return t[2] || 0n; }
-      const t = words(await rpc('eth_call', [{ to: C.HELPER, data: E.call('trySell(address,uint256)', [r.token, amt]) }, 'latest'])), qa = t.length > 3 && t[2] > t[3] ? t[2] - t[3] : 0n; if (!qa) return 0n;
-      const q = words(await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [qa, [r.quote, C.WBNB]]) }, 'latest'])); return q[q.length - 1] || 0n;
+      if (side === 'buy') { const q = await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [amt, [C.WBNB, r.quote]]) }, 'latest'], urls), qw = words(q); const qa = qw[qw.length - 1] || 0n;
+        const t = words(await rpc('eth_call', [{ to: C.HELPER, data: E.call('tryBuy(address,uint256,uint256)', [r.token, 0, qa]) }, 'latest'], urls)); return t[2] || 0n; }
+      const t = words(await rpc('eth_call', [{ to: C.HELPER, data: E.call('trySell(address,uint256)', [r.token, amt]) }, 'latest'], urls)), qa = t.length > 3 && t[2] > t[3] ? t[2] - t[3] : 0n; if (!qa) return 0n;
+      const q = words(await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [qa, [r.quote, C.WBNB]]) }, 'latest'], urls)); return q[q.length - 1] || 0n;
     }
-    const c = quoteCall(r, side, amt); if (!c) throw new Error(r.why || 'no route'); return quoteParse(r, side, await rpc(c[0], c[1]));
+    const c = quoteCall(r, side, amt); if (!c) throw new Error(r.why || 'no route'); return quoteParse(r, side, await rpc(c[0], c[1], urls));
+  }
+  /* 3.26.1 security (audit 1122): the minimum a trade accepts is set from the quote. One lying node could quote low and so lower that
+     minimum (room for a sandwich). The quote is asked of two different nodes and the HIGHER one is used (the stricter minimum); when
+     they differ by more than 3 % a third node decides (the middle one of three). */
+  const from = i => [READ[i % READ.length], ...READ.filter((_, j) => j !== i % READ.length)];
+  async function quoteSafe(r, side, amt) {
+    if (READ.length < 2) return quote(r, side, amt);
+    const [q1, q2] = await Promise.all([quote(r, side, amt, from(RI)).catch(() => null), quote(r, side, amt, from(RI + 1)).catch(() => null)]);
+    const L = [q1, q2].filter(x => x != null && x > 0n); if (!L.length) return quote(r, side, amt); if (L.length === 1) return L[0];
+    const hi = L[0] > L[1] ? L[0] : L[1], lo = L[0] > L[1] ? L[1] : L[0];
+    if (hi - lo > hi * 3n / 100n) { const q3 = await quote(r, side, amt, from(RI + 2)).catch(() => null); if (q3 != null && q3 > 0n) { const s = [lo, hi, q3].sort((x, y) => x < y ? -1 : x > y ? 1 : 0); return s[1]; } }
+    return hi;
   }
 
   /* ---------- the transaction (HAKI build) ---------- */
@@ -186,7 +198,7 @@ const BSC = (() => {
     let amt;
     if (o.side === 'buy') { amt = BigInt(Math.round(+o.bnb * 1e18)); if (!(amt > 0n)) throw new Error('amount must be above 0'); }
     else { const bal = await balanceOf(r.token, me); const pct = Math.max(0, Math.min(100, +o.pct || 0)); amt = pct >= 100 ? bal : bal * BigInt(Math.round(pct * 100)) / 10000n; if (!(amt > 0n)) throw new Error('you hold none of this token'); }
-    const [est, gp] = await Promise.all([quote(r, o.side, o.side === 'sell' && (r.route === 'four' || r.route === 'four_x') ? amt / 10n ** 9n * 10n ** 9n : amt), gasPrice(+o.gwei || 0)]);
+    const [est, gp] = await Promise.all([quoteSafe(r, o.side, o.side === 'sell' && (r.route === 'four' || r.route === 'four_x') ? amt / 10n ** 9n * 10n ** 9n : amt), gasPrice(+o.gwei || 0)]);
     if (!(est > 0n)) throw new Error('no quote for this trade: not sent');   /* HAKI minout_guard: never trade with no minimum */
     const min = slip >= 1 ? 1n : est * BigInt(Math.round((1 - slip) * 10000)) / 10000n;
     const tx = build(r, o.side, amt, min > 0n ? min : 1n, me);
@@ -226,6 +238,6 @@ const BSC = (() => {
     return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;

@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HAKI Strike: privacy</title>
+<link rel="icon" href="/admin/logo.svg">
+<style>
+:root{--bg:#0F1117;--s1:#161821;--ln:#262935;--t1:#EDEEF2;--t2:#A3A8B8;--t3:#6E7487}
+*{box-sizing:border-box;margin:0}html{background:var(--bg);color-scheme:dark}
+body{font:400 15px/1.65 Geist,Inter,"Segoe UI",system-ui,sans-serif;color:var(--t2);-webkit-font-smoothing:antialiased}
+main{max-width:720px;margin:0 auto;padding:56px 24px 80px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:28px}header img{width:32px;height:32px}header b{color:var(--t1);font-size:16px}
+h1{color:var(--t1);font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.01em}
+.up{color:var(--t3);font-size:13px;margin-top:6px}
+h2{color:var(--t1);font-size:17px;font-weight:600;margin:32px 0 8px}
+p,li{margin-top:8px}ul{padding-left:20px}
+strong{color:var(--t1);font-weight:600}
+.box{margin-top:24px;padding:16px 18px;border:1px solid var(--ln);border-radius:12px;background:var(--s1);color:var(--t1)}
+a{color:var(--t1)}
+</style></head><body><main>
+<header><img src="/admin/logo.svg" alt=""><b>HAKI Strike</b></header>
+<h1>Privacy policy</h1>
+<p class="up">Last updated 22 November 2026</p>
+<div class="box">Your wallets and private keys never leave your browser. HAKI never receives a key, a wallet address, a balance or a trade.</div>
+
+<h2>What stays on your computer</h2>
+<p>Private keys are encrypted with your password (AES-256-GCM, PBKDF2 with 600,000 rounds) and stored only in your browser. Trades are built and signed on your computer and sent straight to the blockchain networks (Solana, BNB Chain) and their transaction services. Your settings, trade history and Paper trading balance are stored in your browser too.</p>
+
+<h2>What HAKI receives</h2>
+<p>So we can count users and fix bugs, the extension sends to HAKI's own service (a Cloudflare Worker):</p>
+<ul>
+<li><strong>A random install ID</strong>, made by the extension. It is not linked to you, your wallets or your browser account.</li>
+<li><strong>Version, site and chain:</strong> the extension version, which trading site the panel ran on (Axiom, GMGN or Terminal) and the chain (Solana or BNB Chain). Sent at most once every 6 hours while you use it.</li>
+<li><strong>Error texts:</strong> what went wrong, with every address, signature and number removed on your computer before it is sent.</li>
+<li><strong>Reports you choose to send</strong> from Settings, Report a problem: your text, your HAKI settings (presets, hotkey mode, number of wallets) and the last error texts.</li>
+</ul>
+<p>You can turn the automatic part off at any time: Settings, Report a problem, Anonymous stats.</p>
+
+<h2>What we do with it</h2>
+<p>Only to see how many people use HAKI Strike, which versions they run and what breaks, and to answer reports. It is not sold, not shared with anyone, not used for advertising and not used to decide anything about you. Usage records are kept for up to 12 months; reports until they are solved and for up to 12 months after.</p>
+
+<h2>Other services the extension talks to</h2>
+<p>To trade, the extension uses public blockchain services: Solana and BNB Chain nodes, Helius Sender, Jito, Jupiter, DexScreener, GeckoTerminal, pump.fun, IPFS gateways and BNB Chain private relays. They receive the signed transactions and public coin addresses needed to trade or show prices, never a private key. Their own privacy policies apply.</p>
+
+<h2>Source code</h2>
+<p>The full source of the extension and of this service is public so anyone can check this policy: <a href="https://github.com/Asmd17/haki-strike">github.com/Asmd17/haki-strike</a>.</p>
+
+<h2>Contact</h2>
+<p>Questions or a request to delete a report: open an issue at <a href="https://github.com/Asmd17/haki-strike/issues">github.com/Asmd17/haki-strike/issues</a> or use Settings, Report a problem in the extension.</p>
+</main></body></html>

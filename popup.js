@@ -194,6 +194,27 @@ $('mvGo').onclick = async () => {
   if (!r || r.err) { say('tst', (r && r.err) || 'no answer', 'bad'); return; }
   say('tst', sol4(r.sol) + ' SOL moved from ' + r.from + ' to ' + r.to, 'ok'); $('mvAmt').value = ''; mvMax = false; paint();
 };
+/* 3.26.2 backup (to move the extension to another folder / PC): everything in this browser's storage except the copies that only this
+   browser can open (the "stay unlocked" copies and the launch wallets, both locked with a key of this browser). Wallets stay sealed
+   with your password inside the file. */
+const BK_SKIP = ['keep', 'bkeep', 'lwBox'];
+$('bkOut').onclick = async () => {
+  const all = await chrome.storage.local.get(null), lw = Array.isArray(all.lwBox) ? all.lwBox.length : (all.lwBox ? 1 : 0); for (const k of BK_SKIP) delete all[k];
+  const d = new Date(), name = 'haki-strike-backup-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.json';
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ haki: 'strike-backup', v: 1, at: Date.now(), ver: chrome.runtime.getManifest().version, data: all })], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  say('bkst', 'Saved ' + name + ' (' + ((all.wallets || []).length) + ' Solana wallet(s)' + ((all.bwallets || []).length ? ', BSC wallet' : '') + '). Keep it safe: it opens with your password.' + (lw ? ' Launch wallets are not in it: claim their fees first (Multi launch → Claim now).' : ''), 'ok');
+};
+$('bkIn').onclick = () => $('bkFile').click();
+$('bkFile').onchange = async () => {
+  const f = $('bkFile').files[0]; $('bkFile').value = ''; if (!f) return;
+  let j = null; try { j = JSON.parse(await f.text()); } catch (_) {}
+  if (!j || j.haki !== 'strike-backup' || !j.data || !Array.isArray(j.data.wallets)) { say('bkst', 'This is not a HAKI Strike backup file', 'bad'); return; }
+  if (!confirm('Restore ' + j.data.wallets.length + ' wallet(s) and all settings from this file? What is here now is replaced. Only restore a file you saved yourself.')) return;
+  const data = Object.assign({}, j.data); for (const k of BK_SKIP) delete data[k];
+  await chrome.storage.session.clear().catch(() => {}); await chrome.storage.local.remove(BK_SKIP); await chrome.storage.local.set(data);
+  say('bkst', 'Restored. Unlock with your password (Wallets, above).', 'ok'); load();
+};
 $('wAddBtn').onclick = () => { adding = !adding; paint(); if (adding) $('iAddr').focus(); };
 if (WIN === 'add') adding = true;   /* "Add or remove wallets" in the panel: the add form open right away */
 async function load() {

@@ -1151,7 +1151,7 @@ chrome.runtime.onConnect.addListener(port => {
       const st = S.st, raw = total(), v = SOLX.valueNow(Object.assign({}, st, { raw })); if (v == null) return;
       if (S.a && S.mint) AMAP.set(S.a, S.mint);
       const ac = S.c && S.c.autoSlip !== false ? { b: autoSlip(S.mint, 'buy', feeT(S.c, 'buy').slip), s: autoSlip(S.mint, 'sell', feeT(S.c, 'sell').slip) } : null;
-      post({ mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length, aslip: ac });
+      post({ sym: S.sym, mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length, aslip: ac });
     }, d);
   };
   const stop = () => { for (const id of S.ids) wsUnsub(S.c, id); S.ids = []; clearInterval(S.poll); clearInterval(S.rate); clearInterval(S.chk); S.poll = S.rate = S.chk = 0; if (S.st) S.st.live = false; S.st = null; };
@@ -1163,7 +1163,7 @@ chrome.runtime.onConnect.addListener(port => {
     for (const pub of pubs) wsSub(c, pub, v => { if (!v) return; bals.set(pub, v.lamports); BALS.set(pub, { v: v.lamports, t: Date.now() }); if (pub === b.pub) { BAL.v = v.lamports; BAL.t = Date.now(); }
       if (bals.size === pubs.length) post({ bal: [...bals.values()].reduce((s, x) => s + x, 0) / 1e9 }); }).then(id => { if (gen === S.gen) S.ids.push(id); else wsUnsub(c, id); }).catch(() => {});
     const p = await posAll(c, S.a, S.isMint, pubs); if (gen !== S.gen) return;
-    S.mint = p.mint; S.usd = await SOLX.solUsd(); S.L = await ledOf(p.mint, pubs); coinFull(p.mint).catch(() => {});   /* for Share PnL */
+    S.mint = p.mint; S.sym = null; symOf(p.mint, rpcUrl(c)).then(x => { if (S.mint === p.mint) S.sym = x; }).catch(() => {}); S.usd = await SOLX.solUsd(); S.L = await ledOf(p.mint, pubs); coinFull(p.mint).catch(() => {});   /* for Share PnL */
     if (gen !== S.gen) return;
     post(Object.assign({}, p, { usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, p.value_sol) : null }));
     S.raws = new Map(p.parts.map(q => [q.pub, BigInt(q.raw || 0)]));

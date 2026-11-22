@@ -738,12 +738,16 @@ button.c:active{transform:translateY(1px) scale(.985)}
     }
     status(label + ': not landed in 30 s. Check the wallet on BscScan.', 'bad');
   }
+  let pathAt = 0;   /* 3.26.1: when the page's address last changed */
   async function trade(a, side, v, btn) {
     if (!a || (side === 'sell' && selling)) return;
+    /* 3.26.1 security (audit 1122): a page can swap the coin in its address right under your click. A trade within 0.6 s of the address
+       changing (or for another coin than the one on the page now) is not sent: look, then click again */
+    if (Date.now() - pathAt < 600 || a !== pageAddr()) { status('The page just switched coins: check the coin and click again', 'bad'); return; }
     if (PAPER) return paperTrade(a, side, v, btn);
     if (isBsc(a)) return tradeBsc(a, side, v, btn);
     if (side === 'buy') nBuy++; else selling = true; lock(); const t0 = Date.now();
-    const label = side === 'buy' ? 'Buy ' + v + ' SOL' : 'Sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%';
+    const label = (side === 'buy' ? 'Buy ' + v + ' SOL' : 'Sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%') + (last && last.sym && last.mint && (a === last.mint || pageAddr() === a) ? ' · $' + String(last.sym).slice(0, 12) : '');
     if (btn) { if (!btn._n) btn.classList.add('busy'); btn._n = (btn._n || 0) + 1; }   /* 3.11.2 (owner): the amount stays on the key while it trades */
     status(label + (side === 'buy' && nBuy > 1 ? '… (' + nBuy + ' buys going)' : '…'));
     const mc = last && Date.now() - lastT < 5000 && +last.mc_sol > 0 ? +last.mc_sol : 0;   /* 3.12.22 Exact: the MC you saw at the click */
@@ -1412,7 +1416,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
   }
   let covT = 0;
   function route() {
-    if (location.pathname !== qPath) { qPath = location.pathname; baseAt = Date.now() + 1500; covT = 0; }
+    if (location.pathname !== qPath) { qPath = location.pathname; baseAt = Date.now() + 1500; covT = 0; pathAt = Date.now(); }
     /* 3.20.0 (owner: "smooth"): reading the page's layout 3 times a second made the host stutter; now once a second, between frames */
     if (Date.now() - covT > 1000) { covT = Date.now(); requestAnimationFrame(cover); }
     const a = pageAddr(); if (a === A) return; A = a; last = null;

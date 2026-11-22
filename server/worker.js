@@ -1,6 +1,7 @@
 import APP_CSS from './ui/app.css';
 import APP_JS from './ui/app.js.txt';
 import LOGO from './logo.svg';
+import PRIVACY from './ui/privacy.html';
 
 /* HAKI Strike stats API + admin (Cloudflare Worker, D1).
    What the extension sends: a random install ID, its version, the site (axiom / gmgn / padre), the chain (sol / bsc), error texts with
@@ -138,6 +139,7 @@ export default {
           await env.DB.prepare('UPDATE reports SET status=?, note=? WHERE rid=?').bind(st, clean(o.note, 500), +o.rid || 0).run(); return J({ ok: true }, 200, SEC);
         }
       }
+      if (p === '/privacy' || p === '/privacy/') return new Response(PRIVACY, { headers: { 'content-type': 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'" } });
       if (p === '/') return new Response('HAKI Strike', { headers: { 'content-type': 'text/plain' } });
       return new Response('Not found', { status: 404 });
     } catch (e) {
