@@ -1,0 +1,170 @@
+(() => {
+  /* HAKI Strike admin: one page, built from /admin/api/data every minute. All text goes in with textContent (reports are user text). */
+  const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+  const ns = 'http://www.w3.org/2000/svg', sv = (t, a) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const ago = t => { const s = (Date.now() - t) / 1000; return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
+  const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : String(n);
+  const dayList = (now, n) => { const L = []; for (let i = n - 1; i >= 0; i--) L.push(new Date(now - i * 864e5).toISOString().slice(0, 10)); return L; };
+  const ICON = {
+    ref: '<svg viewBox="0 0 16 16"><path d="M13.25 8A5.25 5.25 0 1 1 11.6 4.2M13.25 2.75v3h-3"/></svg>',
+    out: '<svg viewBox="0 0 16 16"><path d="M6.25 13.25h-2.5a1 1 0 0 1-1-1v-8.5a1 1 0 0 1 1-1h2.5M10.25 11 13.25 8l-3-3M13.25 8h-7"/></svg>'
+  };
+  const app = document.getElementById('app');
+  let D = null, RF = 'open', RANGE = 30, OPEN = new Set(), Q = '';
+  async function load() {
+    const r = await fetch('/admin/api/data', { credentials: 'same-origin' }).catch(() => null);
+    if (!r) return; if (r.status === 401) { location.reload(); return; }
+    D = await r.json(); draw();
+  }
+
+  function delta(cur, prev, label) {
+    const d = el('span', 'd');
+    if (!prev) { d.textContent = cur ? 'new' : '–'; d.append(el('small', '', label)); return d; }
+    const p = (cur - prev) / prev * 100; d.className = 'd ' + (p > 0.5 ? 'up' : p < -0.5 ? 'dn' : '');
+    d.textContent = (p > 0 ? '▲ ' : p < 0 ? '▼ ' : '') + Math.abs(p).toFixed(p && Math.abs(p) < 10 ? 1 : 0) + '%'; d.append(el('small', '', label)); return d;
+  }
+  function spark(vals, color) {
+    const s = sv('svg', { class: 'spk', viewBox: '0 0 88 32', preserveAspectRatio: 'none' }); if (vals.length < 2) return s;
+    const mx = Math.max(1, ...vals), pts = vals.map((v, i) => [i / (vals.length - 1) * 88, 30 - v / mx * 28]);
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const gid = 'g' + Math.random().toString(36).slice(2, 7), g = sv('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+    g.append(sv('stop', { offset: 0, 'stop-color': color, 'stop-opacity': .28 }), sv('stop', { offset: 1, 'stop-color': color, 'stop-opacity': 0 }));
+    const df = sv('defs', {}); df.append(g); s.append(df, sv('path', { d: d + ' L88 32 L0 32 Z', fill: 'url(#' + gid + ')' }), sv('path', { d, fill: 'none', stroke: color, 'stroke-width': 1.6, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    return s;
+  }
+  function kpi(label, value, dl, sp, color, hot, link) {
+    const c = el('div', 'kpi' + (hot ? ' hot' : '')); c.append(el('div', 'l', label), el('div', 'v', fmt(value)));
+    if (dl) c.append(dl); if (link) c.append(link); if (sp) c.append(spark(sp, color)); return c;
+  }
+
+  function chart(card) {
+    const days = dayList(D.now, RANGE), A = Object.fromEntries(D.daily.map(r => [r.day, r.n])), N = Object.fromEntries(D.newDaily.map(r => [r.day, r.n]));
+    const wrap = el('div', 'chart'); card.append(wrap);   /* drawn at its real size: no stretched text */
+    const act = days.map(d => A[d] || 0), nw = days.map(d => N[d] || 0), W = Math.max(300, wrap.clientWidth), H = Math.max(240, wrap.clientHeight), pl = 36, pr = 8, pt = 10, pb = 26;
+    const mx = Math.max(4, ...act, ...nw), step = Math.pow(10, Math.floor(Math.log10(mx))), top = Math.ceil(mx / step) * step;
+    const x = i => pl + (days.length === 1 ? 0 : i / (days.length - 1)) * (W - pl - pr), y = v => pt + (1 - v / top) * (H - pt - pb);
+    const s = sv('svg', { viewBox: '0 0 ' + W + ' ' + H });
+    for (let k = 0; k <= 4; k++) { const v = top * k / 4, yy = y(v); s.append(sv('line', { class: 'gl', x1: pl, x2: W - pr, y1: yy, y2: yy })); const t = sv('text', { class: 'ax', x: pl - 8, y: yy + 4, 'text-anchor': 'end' }); t.textContent = fmt(Math.round(v)); s.append(t); }
+    const every = RANGE > 14 ? 5 : 1;
+    days.forEach((d, i) => { if (i % every && i !== days.length - 1) return; const t = sv('text', { class: 'ax', x: x(i), y: H - 6, 'text-anchor': i === days.length - 1 ? 'end' : 'middle' }); t.textContent = i === days.length - 1 ? 'Today' : d.slice(5).replace('-', '/'); s.append(t); });
+    const bw = Math.max(3, (W - pl - pr) / days.length * 0.42);
+    nw.forEach((v, i) => { if (v) s.append(sv('rect', { x: x(i) - bw / 2, y: y(v), width: bw, height: y(0) - y(v), rx: 2, fill: '#3A3F50' })); });
+    const g = sv('linearGradient', { id: 'ga', x1: 0, y1: 0, x2: 0, y2: 1 }); g.append(sv('stop', { offset: 0, 'stop-color': '#3DDC97', 'stop-opacity': .22 }), sv('stop', { offset: 1, 'stop-color': '#3DDC97', 'stop-opacity': 0 }));
+    const df = sv('defs', {}); df.append(g); s.append(df);
+    const line = act.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+    s.append(sv('path', { d: line + ' L' + x(days.length - 1) + ' ' + y(0) + ' L' + x(0) + ' ' + y(0) + ' Z', fill: 'url(#ga)' }), sv('path', { d: line, fill: 'none', stroke: '#3DDC97', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }));
+    const cross = sv('line', { x1: 0, x2: 0, y1: pt, y2: H - pb, stroke: '#4B5062', 'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: 0, 'vector-effect': 'non-scaling-stroke' }), dot = sv('circle', { r: 4, fill: '#3DDC97', stroke: '#161821', 'stroke-width': 2, opacity: 0 });
+    s.append(cross, dot); wrap.append(s);
+    const tip = el('div', 'tip'); tip.hidden = true; wrap.append(tip);
+    wrap.onmousemove = e => {
+      const r = wrap.getBoundingClientRect(), fx = (e.clientX - r.left) / r.width * W, i = Math.max(0, Math.min(days.length - 1, Math.round((fx - pl) / (W - pl - pr) * (days.length - 1))));
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('opacity', 1); dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(act[i])); dot.setAttribute('opacity', 1);
+      tip.hidden = false; tip.textContent = ''; tip.append(el('b', '', new Date(days[i] + 'T12:00:00Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short', weekday: 'short' })));
+      for (const [l, v] of [['Active', act[i]], ['New', nw[i]]]) { const sp = el('span', '', l); sp.append(el('em', '', String(v))); tip.append(sp); }
+      tip.style.left = (x(i) / W * r.width) + 'px'; tip.style.top = (y(act[i]) / H * r.height) + 'px';
+    };
+    wrap.onmouseleave = () => { tip.hidden = true; cross.setAttribute('opacity', 0); dot.setAttribute('opacity', 0); };
+  }
+
+  function breakdown(title, rows, key, colors, label) {
+    const c = el('div', 'card'), h = el('div', 'ch'); h.append(el('h2', '', title)); c.append(h);
+    const tot = rows.reduce((s, r) => s + r.n, 0), L = el('div', 'bl');
+    if (!rows.length) L.append(el('div', 'empty', 'No data yet'));
+    const latest = key === 'ver' ? rows.map(r => r.ver).sort((a, b) => b.split('.').map(Number).reduce((s, v, i) => s || v - (a.split('.').map(Number)[i] || 0), 0))[0] : null;
+    rows.forEach((r, i) => {
+      const it = el('div', 'bi'), col = colors[r[key]] || colors._[i % colors._.length], dot = el('i', 'dot'); dot.style.background = col;
+      const k = el('span', 'k', label ? label(r[key]) : (r[key] || '–')); if (latest && r[key] === latest) k.append(el('span', 'nw', 'latest'));
+      const bar = el('div', 'bar'), b = el('i'); b.style.width = (tot ? r.n / tot * 100 : 0) + '%'; b.style.background = col; bar.append(b);
+      it.append(dot, k, el('span', 'n', String(r.n)), el('span', 'p', tot ? Math.round(r.n / tot * 100) + '%' : '')); it.append(bar); L.append(it);
+    });
+    c.append(L); return c;
+  }
+
+  const CTX = [['ver', 'Version'], ['site', 'Site'], ['os', 'System'], ['lang', 'Language'], ['wallets', 'Wallets'], ['bsc', 'BSC wallet'], ['preset', 'Preset'], ['slip', 'Slippage, %'],
+    ['prio', 'Priority, SOL'], ['tip', 'Tip, SOL'], ['smartFees', 'Smart fees'], ['hotkeys', 'Hotkeys'], ['ownRpc', 'Own RPC'], ['jupKey', 'Jupiter key'], ['pz', 'Panel size']];
+  function report(x) {
+    const w = el('div', 'rp ' + x.status), row = el('button', 'rr'); row.type = 'button'; row.setAttribute('aria-expanded', String(OPEN.has(x.rid)));
+    const tx = el('div', 'tx'); tx.append(el('b', '', x.text.split('\n')[0])); const mt = el('div', 'mt');
+    for (const t of ['#' + x.rid, 'v' + x.ver, x.host, (x.chain || 'sol').toUpperCase()]) mt.append(el('span', 'chip', t)); tx.append(mt);
+    row.append(el('i', 'sd'), tx, el('span', 'ago', ago(x.t)));
+    row.onclick = () => { OPEN.has(x.rid) ? OPEN.delete(x.rid) : OPEN.add(x.rid); draw(); };
+    w.append(row);
+    if (OPEN.has(x.rid)) {
+      const d = el('div', 'rd'); if (x.text.includes('
+') || x.text.length > 110) d.append(el('div', 'full', x.text));   /* a one-line report is already shown in full above */
+      let c = {}; try { c = JSON.parse(x.ctx || '{}'); } catch (_) {}
+      const kv = el('div', 'kv'); for (const [k, l] of CTX) if (c[k] != null && c[k] !== '') { const cell = el('div'); cell.append(el('span', '', l), el('b', '', typeof c[k] === 'boolean' ? (c[k] ? 'Yes' : 'No') : String(c[k]))); kv.append(cell); }
+      if (kv.children.length) { d.append(el('div', 'sub', 'Their setup'), kv); }
+      const E = Array.isArray(c.recentErrors) ? c.recentErrors : [];
+      if (E.length) { const re = el('div', 're'); for (const e of E) { const r = el('div'); r.append(el('span', 'chip', e.kind || 'error'), el('span', 'muted', e.ago || ''), el('code', '', e.msg || '')); re.append(r); } d.append(el('div', 'sub', 'Their last errors'), re); }
+      const acts = el('div', 'acts'), note = el('textarea'); note.placeholder = 'Note for the team (optional)'; note.value = x.note || ''; note.setAttribute('aria-label', 'Note');
+      acts.append(note);
+      for (const [s, l] of [['solved', 'Mark solved'], ['ignored', 'Ignore'], ['open', 'Reopen']]) if (s !== x.status) {
+        const b = el('button', s === 'solved' ? 'pri' : 'sec', l); if (s === 'solved') { b.style.height = '38px'; b.style.padding = '0 14px'; } else b.style.height = '38px';
+        b.onclick = async () => { b.disabled = true; await fetch('/admin/api/report', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-hk': '1' }, body: JSON.stringify({ rid: x.rid, status: s, note: note.value }) }); OPEN.delete(x.rid); load(); };
+        acts.append(b);
+      }
+      d.append(acts); w.append(d);
+    }
+    return w;
+  }
+
+  function draw() {
+    const y = scrollY; app.textContent = '';
+    const top = el('header', 'top'), ti = el('div', 'in'), img = el('img'); img.src = '/admin/logo.svg'; img.alt = '';
+    const rf = el('button', 'ico'); rf.innerHTML = ICON.ref; rf.title = 'Refresh'; rf.setAttribute('aria-label', 'Refresh'); rf.onclick = load;
+    const lo = el('button', 'ico'); lo.innerHTML = ICON.out; lo.title = 'Sign out'; lo.setAttribute('aria-label', 'Sign out'); lo.onclick = () => { location.href = '/admin/logout'; };
+    ti.append(img, el('span', 'nm', 'HAKI Strike'), el('span', 'tag', 'Admin'), el('span', 'sp'), el('span', 'live', 'Live · ' + new Date(D.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })), rf, lo);
+    top.append(ti); app.append(top);
+    const m = el('main'); app.append(m);
+    const hd = el('div', 'head'); hd.append(el('h1', '', 'Overview'), el('p', '', 'Anonymous usage of the extension. No wallets, keys, balances or trades are collected.')); m.append(hd);
+
+    const d14 = dayList(D.now, 14), A = Object.fromEntries(D.daily.map(r => [r.day, r.n])), N = Object.fromEntries(D.newDaily.map(r => [r.day, r.n]));
+    const act14 = d14.map(d => A[d] || 0), new14 = d14.map(d => N[d] || 0); let cum = D.total - new14.reduce((s, v) => s + v, 0); const tot14 = new14.map(v => (cum += v));
+    const k = el('div', 'kpis'); m.append(k);
+    const rl = el('a', '', 'Review →'); rl.href = '#reports';
+    k.append(kpi('Active today', D.today, delta(D.today, D.yesterday, 'vs yesterday'), act14, '#3DDC97'),
+      kpi('Active, 7 days', D.week, delta(D.week, D.prevWeek, 'vs last week'), act14, '#3DDC97'),
+      kpi('Users, all time', D.total, delta(D.newToday, D.newYesterday, 'new vs yesterday'), tot14, '#A3A8B8'),
+      kpi('New today', D.newToday, null, new14, '#A3A8B8'),
+      kpi('Open reports', D.counts.open || 0, null, null, null, (D.counts.open || 0) > 0, rl));
+    k.lastChild.querySelector('a').style.cssText = 'display:inline-block;margin-top:10px';
+
+    const g = el('div', 'grid'); m.append(g);
+    const c1 = el('div', 'card chartcard'), h1 = el('div', 'ch'); h1.append(el('h2', '', 'Active users'));
+    const lg1 = el('span', 'lg'), i1 = el('i'); i1.style.background = '#3DDC97'; lg1.append(i1, document.createTextNode('Active'));
+    const lg2 = el('span', 'lg'), i2 = el('i'); i2.style.background = '#3A3F50'; lg2.append(i2, document.createTextNode('New'));
+    const seg = el('div', 'seg'); for (const r of [7, 30]) { const b = el('button', r === RANGE ? 'on' : '', r + 'D'); b.onclick = () => { RANGE = r; draw(); }; seg.append(b); }
+    h1.append(lg1, lg2, el('span', 'sp'), seg); c1.append(h1); g.append(c1);
+    const col = el('div', 'col'); g.append(col);
+    col.append(breakdown('Versions, 7 days', D.versions, 'ver', { _: ['#EDEEF2', '#A3A8B8', '#6E7487', '#4B5062'] }),
+      breakdown('Sites, 7 days', D.hosts, 'host', { axiom: '#EDEEF2', gmgn: '#3DDC97', padre: '#A3A8B8', _: ['#6E7487'] }, h => ({ axiom: 'Axiom', gmgn: 'GMGN', padre: 'Terminal', popup: 'Settings only' })[h] || h),
+      breakdown('Chains, 7 days', D.chains, 'chain', { sol: '#14F195', bsc: '#F0B90B', _: ['#6E7487'] }, ch => ch === 'bsc' ? 'BNB Chain' : 'Solana'));
+
+    chart(c1);   /* after the side column: the card has its final height */
+    const rc = el('div', 'card'); rc.id = 'reports'; const rh = el('div', 'ch'); rh.append(el('h2', '', 'Reports'), el('span', 'sp'));
+    const rs = el('div', 'seg'); for (const [f, l] of [['open', 'Open'], ['solved', 'Solved'], ['ignored', 'Ignored'], ['all', 'All']]) {
+      const n = f === 'all' ? D.reports.length : (D.counts[f] || 0), b = el('button', f === RF ? 'on' : '', l); b.append(el('b', '', String(n))); b.onclick = () => { RF = f; draw(); }; rs.append(b); }
+    rh.append(rs); rc.append(rh);
+    const RS = D.reports.filter(x => RF === 'all' || x.status === RF), L = el('div', 'rl');
+    if (!RS.length) L.append(el('div', 'empty', RF === 'open' ? 'No open reports. All good.' : 'Nothing here yet.'));
+    for (const x of RS) L.append(report(x)); rc.append(L); m.append(rc);
+
+    const ec = el('div', 'card'), eh = el('div', 'ch'); eh.append(el('h2', '', 'Errors'), el('span', 'muted', D.err24 + ' new or repeated in 24 h'), el('span', 'sp'));
+    const sr = el('input', 'srch'); sr.type = 'search'; sr.placeholder = 'Search errors'; sr.value = Q; sr.setAttribute('aria-label', 'Search errors');
+    eh.append(sr); ec.append(eh);
+    const tw = el('div', 'tw'), t = el('table'), th = el('tr');
+    for (const [c, a] of [['Where', ''], ['Message', ''], ['Times', 'right'], ['Users', 'right'], ['Versions', ''], ['First seen', 'right'], ['Last seen', 'right']]) { const x = el('th', '', c); if (a) x.style.textAlign = a; th.append(x); }
+    const tb = el('tbody'); t.append(th, tb); tw.append(t); ec.append(tw); m.append(ec);
+    const fill = () => {
+      tb.textContent = ''; const q = Q.toLowerCase(), E = D.errors.filter(e => !q || (e.kind + ' ' + e.msg).toLowerCase().includes(q));
+      if (!E.length) { const tr = el('tr'), td = el('td', 'empty', D.errors.length ? 'No errors match' : 'No errors yet. Nice.'); td.colSpan = 7; tr.append(td); tb.append(tr); return; }
+      for (const e of E) { const tr = el('tr'), w = el('td'); w.append(el('span', 'chip', e.kind)); const vs = el('td'); for (const v of (e.vers || '').trim().split(/\s+/).filter(Boolean).slice(-3)) vs.append(el('span', 'chip', v), document.createTextNode(' '));
+        tr.append(w, el('td', 'msg', e.msg), el('td', 'n', String(e.n)), el('td', 'n', String(e.users)), vs, el('td', 't', ago(e.first)), el('td', 't', ago(e.last))); tb.append(tr); }
+    };
+    sr.oninput = () => { Q = sr.value; fill(); }; fill();
+    scrollTo(0, y);
+  }
+  let rzT = 0; addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (D) draw(); }, 150); });
+  load(); setInterval(() => { if (!document.hidden && !document.activeElement.matches('textarea,input')) load(); }, 60000);
+})();
