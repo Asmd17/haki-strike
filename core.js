@@ -672,6 +672,11 @@ const SOLX = (() => {
       /* 3.17.0: selling everything closes the coin's token account in the same transaction: its ~0.002 SOL rent comes straight back */
       shut = +o.pct >= 100 && amt === st.raw; if (shut) cu += 6000;
     }
+    if (o._raw) {   /* 3.26.0: only this wallet's own steps, for a transaction shared by several wallets (multiTrade) */
+      const body = []; if (o.side === 'buy') body.push({ prog: ATAP, keys: [[pub, true, true], [st.ata, false, true], [pub, false, false], [st.mint, false, false], [SYS, false, false], [st.prog, false, false]], data: Uint8Array.of(1) });
+      body.push(ix); if (shut) body.push({ prog: st.prog, keys: [[st.ata, false, true], [pub, false, true], [pub, true, false]], data: Uint8Array.of(9) });
+      return { body, cu, out, impact, fee: Number(fee.p + fee.c), bc: st.bc };
+    }
     ({ tip, prio } = smart(o, st.bc, cu, tip, prio, url));
     const ixs = cbIxs(cu, prio, o.lds != null ? o.lds : o.safe ? 0 : LDS_CURVE);
     if (o.side === 'buy') ixs.push({ prog: ATAP, keys: [[pub, true, true], [st.ata, false, true], [pub, false, false], [st.mint, false, false], [SYS, false, false], [st.prog, false, false]], data: Uint8Array.of(1) });
@@ -680,13 +685,48 @@ const SOLX = (() => {
     if (tip > 0) ixs.push({ prog: SYS, keys: [[pub, true, true], [HTIP[Math.floor(Math.random() * HTIP.length)], false, true]], data: cat(le(2, 4), le(tip, 8)) });
     return { msg: compile(pub, ixs, bh), out, impact, tip, prio, fee: Number(fee.p + fee.c) };
   }
+  /* 3.26.0 (owner: "all wallets in one transaction"): several wallets buy (or sell) the same pump.fun coin in ONE transaction: the same
+     block, one after another with nobody in between, one network fee and one tip (paid by the first wallet) instead of one per wallet.
+     As many wallets as fit Solana's 1232 bytes go in a transaction (2-3 on a curve); the rest in the next, sent at the same moment.
+     list: [{seed, pub, st}] -> {groups: [{sig, tx64, pubs, payer, tip, prio, sent, sending}], errs: [{pub, err}], ms} */
+  async function multiTrade(o, list, url) {
+    const t0 = Date.now(), parts = [];
+    for (const w of list) { try { parts.push({ w, b: await pumpBuild(Object.assign({}, o, { _raw: true }), w.st, w.pub, url) }); } catch (e) { parts.push({ w, err: String((e && e.message) || e).slice(0, 160) }); } }
+    const okp = parts.filter(p => !p.err), out = [], bh = await blockhash(url);
+    const tip0 = Math.round(Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)) * 1e9), prio0 = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
+    const make = g => {
+      const cu = Math.min(1400000, g.reduce((s, p) => s + p.b.cu, 0)), { tip, prio } = smart(o, g[0].b.bc, cu, tip0, prio0, url), payer = g[0].w.pub;
+      const ixs = cbIxs(cu, prio, 0); for (const p of g) ixs.push(...p.b.body);
+      if (tip > 0) ixs.push({ prog: SYS, keys: [[payer, true, true], [HTIP[Math.floor(Math.random() * HTIP.length)], false, true]], data: cat(le(2, 4), le(tip, 8)) });
+      const msg = compile(payer, ixs, bh, g.length); return { msg, tip, prio, size: cu16e(g.length).length + 64 * g.length + msg.length };
+    };
+    const groups = []; let cur = [];
+    for (const p of okp) { if (!cur.length) { cur = [p]; continue; } let fit = false; try { fit = make([...cur, p]).size <= 1232; } catch (_) {} if (fit) cur.push(p); else { groups.push(cur); cur = [p]; } }
+    if (cur.length) groups.push(cur);
+    for (const g of groups) {
+      const t = make(g); if (t.size > 1232) { for (const p of g) parts.push({ w: p.w, err: 'transaction too big' }); continue; }
+      const [, k0] = cu16(t.msg, 3), seedOf = new Map(g.map(p => [p.w.pub, p.w.seed])), order = [];
+      for (let i = 0; i < g.length; i++) order.push(b58e(t.msg.slice(k0 + 32 * i, k0 + 32 * i + 32)));   /* signatures in the message's signer order */
+      const sigs = await Promise.all(order.map(k => sign(seedOf.get(k), t.msg))), tx64 = b64(cat(cu16e(g.length), ...sigs, t.msg));
+      const res = { sig: b58e(sigs[0]), tx64, pubs: g.map(p => p.w.pub), payer: order[0], tip: t.tip / 1e9, prio: t.prio, out: g.map(p => p.b.out.toString()) };
+      if (o.live === false) { const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: false, replaceRecentBlockhash: true, commitment: 'processed' }], url)) || {}).value || {};
+        Object.assign(res, { sent: false, sim_err: v.err || null, cu: v.unitsConsumed, logs: v.logs }); }
+      else { res.sending = sendFast(tx64, url, t.tip >= 5000 ? t.tip : 0); res.sent = true; }
+      out.push(res);
+    }
+    return { groups: out, errs: parts.filter(p => p.err).map(p => ({ pub: p.w.pub, err: p.err })), ms: Date.now() - t0 };
+  }
+  const LANE = new Map();   /* 3.26.0: url -> {bad, until}: 3 refusals in a row = skipped for 2 min (the node itself never is) */
+  const laneOk = u => { const x = LANE.get(u); return !x || x.until < Date.now(); };
+  const laneNote = (u, ok) => { const x = LANE.get(u) || { bad: 0, until: 0 }; if (ok) { x.bad = 0; x.until = 0; } else if (++x.bad >= 3) { x.until = Date.now() + 120000; x.bad = 0; } LANE.set(u, x); };
   async function sendFast(tx64, url, sender) {   /* Helius Sender (tip inside) + the node, at once; ok when either took it */
-    const one = async (u, params) => { try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params }) }); const j = await r.json(); return ['result' in j, u, JSON.stringify(j.error || '').slice(0, 100)]; } catch (e) { return [false, u, String(e).slice(0, 100)]; } };
+    const one0 = async (u, params) => { try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params }) }); const j = await r.json(); return ['result' in j, u, JSON.stringify(j.error || '').slice(0, 100)]; } catch (e) { return [false, u, String(e).slice(0, 100)]; } };
+    const one = (u, params) => one0(u, params).then(x => { laneNote(u.split('?')[0], x[0]); return x; });
     const L = [one(url || RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 5 }])];
     /* 3.17.0: sender = the tip in lamports (true = old callers). Helius Sender's default lanes take tips from 0.001 SOL; a smaller tip goes
        to its SWQOS lane (from 0.000005 SOL), so the tip you pay always buys speed */
     const swq = typeof sender === 'number' && sender < 1000000;
-    if (sender) for (const u of [...SENDERS_NEAR, SENDER]) L.push(one(swq ? u + '?swqos_only=true' : u, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 0 }]));
+    if (sender) for (const u of [...SENDERS_NEAR, SENDER].filter(laneOk)) L.push(one(swq ? u + '?swqos_only=true' : u, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 0 }]));
     if (url) L.push(one(RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 5 }]));
     /* 3.11.4 (owner: "0.3-0.5 s"): done the moment the first lane took it; the others finish on their own (was: wait for the slowest) */
     return new Promise((res, rej) => {
@@ -1305,7 +1345,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64 };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

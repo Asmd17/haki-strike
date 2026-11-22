@@ -35,7 +35,7 @@ chrome.runtime.onInstalled.addListener(async d => {
   } catch (_) {}
 });
 const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
-const DEF = { autoSlip: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
+const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
   cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
@@ -212,7 +212,29 @@ const feeOf = (c, side) => Object.assign(side === 'sell' ? { slip: c.sslip, prio
    click (the quote at the click already has the pump.fun fee and your own size in it) or not at all: no fill far below the price you saw,
    and no automatic second try with more slippage. Auto sell (take profit / stop) keeps the preset's slippage: a stop must fill. */
 const EXACT = false;   /* 3.18.4 (owner: "Exact is not needed"): trades use the preset slippage; the switch is gone from the panel */
-const feeT = (c, side, auto) => { const f = feeOf(c, side); if (!auto && EXACT && c.sellExact !== false) {   /* 3.12.22: buys too (owner 1120: 'clicked at 170K, filled at 182K') */ f.slip = Math.min(f.slip, Math.max(0.5, side === 'buy' ? (+c.exactTolBuy || 5) : (+c.exactTol || 2))); f.exact = true; }   /* 3.12.24: buys 5 %, sells 2 % (owner 1120) */ return f; };
+/* 3.26.0 (owner: "self-tuning speed"): every trade's way to the chain is measured (the click -> sent time, and the slots from sending to
+   landing, both slots from the WebSocket). While your trades of a preset keep landing in the next block, its tip and priority fee are
+   eased down (x0.85 after 4 in a row); one that needs 3+ slots puts them back up (x1.4), a trade that does not land puts them back to
+   your preset. Your preset is always the most; a tip from 0.001 SOL never goes under 0.001 (the Jito + SWQOS lanes). */
+const SLOT = { v: 0, t: 0 }, LAND = new Map(), SPD = { f: [1, 1, 1], g: [0, 0, 0], h: [] };
+chrome.storage.local.get({ spd: null }).then(o => { if (o.spd && Array.isArray(o.spd.f)) Object.assign(SPD, o.spd); }).catch(() => {});
+let spdT = 0; const spdSave = () => { clearTimeout(spdT); spdT = setTimeout(() => chrome.storage.local.set({ spd: SPD }).catch(() => {}), 1500); };
+const slotNow = () => SLOT.v ? SLOT.v + Math.floor((Date.now() - SLOT.t) / 400) : 0;
+function landNote(sig, r, c) { if (!sig) return; LAND.set(sig, { t: Date.now(), slot: slotNow(), ms: +r.ms || 0, tip: +r.tip || 0, prio: +r.prio || 0, cap: +r.cap || 0, k: [0, 1, 2].includes(+c.preset) ? +c.preset : 0 }); if (LAND.size > 200) LAND.delete(LAND.keys().next().value); }
+function landSeen(sig, slot, err) {
+  const x = LAND.get(sig); if (!x) return; LAND.delete(sig);
+  const land = Date.now() - x.t, slots = slot && x.slot ? Math.max(0, slot - x.slot) : Math.round(land / 400), k = x.k;
+  SPD.h.push({ t: Date.now(), ms: x.ms, land, slots, tip: x.tip, prio: x.prio, cap: x.cap, ok: !err }); if (SPD.h.length > 100) SPD.h.shift();
+  if (!err) { if (slots <= 1) { if (++SPD.g[k] >= 4) { SPD.f[k] = Math.max(0.3, SPD.f[k] * 0.85); SPD.g[k] = 0; } } else if (slots >= 3) { SPD.f[k] = Math.min(1, SPD.f[k] * 1.4); SPD.g[k] = 0; } }
+  spdSave();
+}
+setInterval(() => { for (const [s, x] of LAND) if (Date.now() - x.t > 60000) { LAND.delete(s); SPD.f[x.k] = 1; SPD.g[x.k] = 0; spdSave(); } }, 15000);   /* never landed: back to your preset */
+const feeT = (c, side, auto) => { const f = feeT0(c, side, auto);
+  if (!auto && c.autoSpeed !== false) { const fac = SPD.f[[0, 1, 2].includes(+c.preset) ? +c.preset : 0] || 1;
+    if (fac < 0.999) { const t0 = +f.tip || 0, p0 = +f.prio || 0; f.cap = t0 + p0;
+      f.tip = Math.min(t0, t0 >= 0.001 ? Math.max(0.001, t0 * fac) : Math.max(0.0002, t0 * fac)); f.prio = Math.min(p0, Math.max(0.00002, p0 * fac)); } }
+  return f; };
+const feeT0 = (c, side, auto) => { const f = feeOf(c, side); if (!auto && EXACT && c.sellExact !== false) {   /* 3.12.22: buys too (owner 1120: 'clicked at 170K, filled at 182K') */ f.slip = Math.min(f.slip, Math.max(0.5, side === 'buy' ? (+c.exactTolBuy || 5) : (+c.exactTol || 2))); f.exact = true; }   /* 3.12.24: buys 5 %, sells 2 % (owner 1120) */ return f; };
 const BAL = { v: null, t: 0 }, BALS = new Map();   /* BALS: each wallet's last balance read */   /* the last balance read (state / pos): a buy checks against it instead of asking the node again */
 /* wallets: a single 'box' from before 3.4 becomes Wallet 1 (kept in place, nothing re-sealed) */
 async function walletsAll() {
@@ -709,6 +731,13 @@ async function handle(m) {
   if (m.op === 'calloutCheck') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint), v = await pfElig(mint); return { v, left: (PFL.get(mint) || {}).left || 0 }; }
   if (m.op === 'callout') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint);   /* 3.14.3: pump.fun takes BSC coins by their 0x address (x2 boost) */ return pfCallout(mint, a.text, 45000, !!a.update); }
   if (m.op === 'snipe') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); return SNIPE.op(a, c); }
+  if (m.op === 'speedStats') {   /* 3.26.0: Settings -> Speed and fees -> Your speed */
+    const H = SPD.h.filter(x => x.ok), med = L => { if (!L.length) return null; const s = [...L].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
+    const k = [0, 1, 2].includes(+c.preset) ? +c.preset : 0, f0 = feeT0(c, 'buy'), f1 = feeT(c, 'buy');
+    const saved = H.reduce((s, x) => s + (x.cap > 0 ? Math.max(0, x.cap - x.tip - x.prio) : 0), 0);
+    return { n: H.length, clickMs: med(H.map(x => x.ms).filter(v => v > 0)), landMs: med(H.map(x => x.land)), next: H.length ? H.filter(x => x.slots <= 1).length / H.length : null,
+      slots: med(H.map(x => x.slots)), preset: k + 1, fac: SPD.f[k], tipNow: f1.tip, prioNow: f1.prio, tipCap: f0.tip, prioCap: f0.prio, saved, on: c.autoSpeed !== false };
+  }
   if (m.op === 'paperSet') { await paperDo(async P => { if (a.reset) { P.sol = PAPER0.sol; P.bnb = PAPER0.bnb; P.pos = {}; } if (a.on != null) P.on = !!a.on; }); return paperGet(); }
   if (m.op === 'paperTrade') {   /* {side, a, isMint, v: SOL / BNB to buy or % to sell} */
     const isB = /^0x[0-9a-fA-F]{40}$/.test(String(a.a || ''));
@@ -1034,11 +1063,30 @@ async function handle(m) {
           if (r.tx64) { if (r.sent) RB.set(r.sig, { tx64: r.tx64, t: Date.now(), last: Date.now(), sender: r.tip >= 0.000005 ? Math.round(r.tip * 1e9) : 0, mint: r.mint, w: u.pub,
             o: Object.assign({ side: a.side, a: a.a, sol: a.sol, pct: a.pct, isMint: !!a.isMint, maxSol: c.maxSol }, fz) }); delete r.tx64; }
           if (r.side === 'buy' && hb) hb.v -= Math.round((+a.sol + r.tip) * 1e9);   /* until the next read */
-          if (r.sent) { sigWatch(c, r.sig).catch(() => {}); pend(r.sig, r.mint, r.side, Math.round(r.tip * 1e9), u.pub).catch(() => {}); }   /* the ledger note is not on the click's path */
+          if (r.sent) { sigWatch(c, r.sig).catch(() => {}); pend(r.sig, r.mint, r.side, Math.round(r.tip * 1e9), u.pub).catch(() => {}); landNote(r.sig, Object.assign({ cap: fz.cap }, r), c); }   /* the ledger note is not on the click's path */
           if (r.sent && r.sig1) await pend(r.sig1, r.mint, r.side, Math.round((r.tip1 || 0) * 1e9), u.pub);   /* 3.8.6 two steps: both count for PnL (SOL in one, tokens in the other) */
           return Object.assign(r, { w: w.pub, label: w.label });
         } catch (e) { return { w: w.pub, label: w.label, err: String((e && e.message) || e).slice(0, 160) }; }
       };
+      if (ready.length >= 2 && c.oneTx !== false && !/^auto-/.test(ck)) {   /* 3.26.0: one transaction for all the wallets (pump.fun curve) */
+        const url = rpcUrl(c), mint = await SOLX.mintOf(a.a, url, !!a.isMint).catch(() => null);
+        const sts = mint ? await Promise.all(ready.map(w => SOLX.pumpState(mint, w.pub, url, 2500).catch(() => null))) : [];
+        const fine = mint && sts.length === ready.length && sts.every(s => s && s.native) && (a.side !== 'buy' || (+a.sol > 0 && +a.sol <= (+c.maxSol || 5)));
+        const L = fine ? ready.map((w, i) => ({ seed: SOLX.unb64(K[w.pub]), pub: w.pub, st: sts[i] })).filter(x => a.side === 'buy' || x.st.raw > 0n) : [];
+        if (L.length >= 2) {
+          const M = await SOLX.multiTrade(Object.assign({ side: a.side, a: a.a, sol: a.sol, pct: a.pct, maxSol: c.maxSol, isMint: !!a.isMint }, fz), L, url), list = [], lab = p => (ready.find(x => x.pub === p) || {}).label || 'Wallet';
+          for (const g of M.groups) {
+            if (g.sending) { const sp = g.sending, sg = g.sig; delete g.sending; sp.then(() => {}, e => { SIGS.set(sg, { err: { send: String((e && e.message) || e).slice(0, 140) } }); RB.delete(sg); }); }
+            if (g.sent) { RB.set(g.sig, { tx64: g.tx64, t: Date.now(), last: Date.now(), sender: g.tip >= 0.000005 ? Math.round(g.tip * 1e9) : 0, mint, w: g.payer, retried: true }); sigWatch(c, g.sig).catch(() => {}); landNote(g.sig, { ms: M.ms, tip: g.tip, prio: g.prio, cap: fz.cap }, c);
+              for (const p of g.pubs) pend(g.sig, mint, a.side, p === g.payer ? Math.round(g.tip * 1e9) : 0, p).catch(() => {}); }
+            for (const p of g.pubs) list.push({ ok: true, side: a.side, mint, sig: g.sig, tip: p === g.payer ? g.tip : 0, prio: g.prio, sent: g.sent, sim_err: g.sim_err, w: p, label: lab(p), native: true, route: ['pump.fun'], batch: g.pubs.length });
+          }
+          for (const e of M.errs) list.push({ w: e.pub, label: lab(e.pub), err: e.err });
+          const ok2 = list.filter(x => !x.err); if (!ok2.length) throw new Error(list.map(x => x.label + ': ' + x.err).join(' · '));
+          const r = Object.assign({}, ok2[0], { list, ms: Date.now() - t0, locked: SW.length - ready.length, txs: M.groups.length });
+          done.set(ck, { t: Date.now(), r }); return r;
+        }
+      }
       const list = await Promise.all(ready.map(one)), ok = list.filter(x => !x.err);
       if (!ok.length && ready.length === 1 && SW.length === 1) throw new Error(list[0].err);   /* one wallet: as before */
       if (!ok.length) throw new Error(list.map(x => x.label + ': ' + x.err).join(' · '));
@@ -1071,12 +1119,13 @@ function wsOpen(c) {
   const ka = setInterval(() => { if (LIVE.ws !== ws || ws.readyState > 1) { clearInterval(ka); return; }
     if (ws.readyState === 1 && Date.now() - LIVE.at > 50000) { clearInterval(ka); wsDrop(ws); return; }
     if (ws.readyState === 1) try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'getHealth' })); } catch (_) {} }, 20000);
-  LIVE.ready = new Promise((res, rej) => { ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('live feed unavailable')); });
+  LIVE.ready = new Promise((res, rej) => { ws.onopen = () => { try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: ++LIVE.id, method: 'slotSubscribe' })); } catch (_) {} res(ws); }; ws.onerror = () => rej(new Error('live feed unavailable')); });
   ws.onmessage = e => {
     LIVE.at = Date.now(); let j; try { j = JSON.parse(e.data); } catch (_) { return; }
     if (j.id != null && LIVE.wait.has(j.id)) { LIVE.wait.get(j.id)(j); LIVE.wait.delete(j.id); return; }
     if (j.method === 'accountNotification') { const f = LIVE.subs.get(j.params.subscription); if (f) f(j.params.result.value); }
-    if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
+    if (j.method === 'slotNotification') { SLOT.v = (j.params.result || {}).slot || SLOT.v; SLOT.t = Date.now(); return; }
+    if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { landSeen(s, ((j.params.result || {}).context || {}).slot, ((j.params.result || {}).value || {}).err); LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
       for (const p of LIVE.ports) try { p.postMessage({ sigDone: s }); } catch (_) {} } }   /* 3.20.5: the panel hears it at once (was: its next 120 ms ask) */
   };
   ws.onclose = () => { if (LIVE.ws !== ws) return; LIVE.ws = null; setTimeout(() => { for (const p of LIVE.ports) p.resub(); }, 800); };

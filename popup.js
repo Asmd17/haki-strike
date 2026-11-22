@@ -38,11 +38,18 @@ let LOADING = false;   /* fields refilled by load() (and a refilled box losing f
 const onEdit = e => { const t = e.target; if (!LOADING && t && t.closest && t.closest('[data-save]') && !t.hasAttribute('data-now')) dirty(true); };
 document.addEventListener('input', onEdit); document.addEventListener('change', onEdit);
 function saved() { dirty(false); const d = document.createElement('div'); d.className = 'done'; d.textContent = 'Saved'; d.setAttribute('role', 'status'); document.body.appendChild(d); clearTimeout(doneT); doneT = setTimeout(() => d.remove(), 1600); }
+async function spdPaint() {   /* 3.26.0 Your speed */
+  const r = await ask('speedStats').catch(() => null); if (!r || r.err) return;
+  $('spdN').textContent = r.n ? 'last ' + r.n + ' trades' : 'no trades measured yet';
+  $('spdC').textContent = r.clickMs != null ? r.clickMs + ' ms' : '–'; $('spdL').textContent = r.landMs != null ? (r.landMs / 1000).toFixed(2) + ' s' : '–';
+  $('spdB').textContent = r.next != null ? Math.round(r.next * 100) + '%' : '–'; $('spdS').textContent = r.saved > 0 ? r.saved.toFixed(4) + ' SOL' : '–';
+  if (r.on && r.fac < 0.999) $('spdT').textContent = 'P' + r.preset + ' now pays tip ' + (+r.tipNow).toFixed(4) + ' (preset ' + (+r.tipCap).toFixed(4) + ') and priority ' + (+r.prioNow).toFixed(5) + ' (preset ' + (+r.prioCap).toFixed(5) + ') SOL: your trades land in the next block';
+}
 function hkNames() {   /* 3.20.6: the options read like the keys you press: Q, Space + Q, Ctrl + Q ... (with your first buy key) */
   const k = (String($('hkBuy').value || '').trim().split(/[\s,]+/)[0] || 'Q').toUpperCase().slice(0, 1) || 'Q';
   for (const o of $('hkMod').options) o.textContent = { none: k, space: 'Space + ' + k, ctrl: 'Ctrl + ' + k, alt: 'Alt + ' + k, shift: 'Shift + ' + k, off: 'Off' }[o.value];
 }
-const DEF = { autoSlip: true, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, presets: null, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '', cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast' };
+const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, presets: null, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '', cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast' };
 const $ = id => document.getElementById(id);
 const say = (el, t, k) => { $(el).textContent = t || ''; $(el).className = 'st' + (k ? ' ' + k : ''); };
 const nums = (s, n, lo, hi) => String(s).split(/[\s,;]+/).map(x => parseFloat(x.replace(',', '.'))).filter(x => x > lo && x <= hi).slice(0, n);
@@ -204,7 +211,7 @@ async function load0() {
   const bs = await chrome.storage.local.get({ bscBuys: [0.01, 0.05, 0.1, 0.25], bscSlip: 15, bscGwei: 0, maxBnb: 2, preset: 0 });
   $('bBuys').value = bs.bscBuys.join(', '); $('bSlip').value = bs.bscSlip; $('bGwei').value = bs.bscGwei; $('maxBnb').value = bs.maxBnb;
   mxFill(); pShow([0, 1, 2].includes(+bs.preset) ? +bs.preset : 0);
-  $('maxSol').value = c.maxSol; $('cTexts').value = (c.cTexts || []).filter(t => t !== 'Looks good, aiming for 2x').join('\n'); $('cAuto').checked = !!c.cAuto; $('cMin').value = c.cMin; $('rpc').value = c.rpc; $('jupKey').value = c.jupKey; $('pulse').checked = !!c.pulse; $('autoSlip').checked = c.autoSlip !== false; $('autoFee').value = ['fast', 'eco', 'off'].includes(c.autoFee) ? c.autoFee : 'fast'; $('sound').checked = c.sound !== false; $('vol').value = c.vol; $('volV').textContent = Math.round(c.vol * 100) + '%'; $('ui').value = c.pz; $('uiV').textContent = Math.round(c.pz * 100) + '%';
+  $('maxSol').value = c.maxSol; $('cTexts').value = (c.cTexts || []).filter(t => t !== 'Looks good, aiming for 2x').join('\n'); $('cAuto').checked = !!c.cAuto; $('cMin').value = c.cMin; $('rpc').value = c.rpc; $('jupKey').value = c.jupKey; $('pulse').checked = !!c.pulse; $('autoSlip').checked = c.autoSlip !== false; $('oneTx').checked = c.oneTx !== false; $('autoSpeed').checked = c.autoSpeed !== false; spdPaint(); $('autoFee').value = ['fast', 'eco', 'off'].includes(c.autoFee) ? c.autoFee : 'fast'; $('sound').checked = c.sound !== false; $('vol').value = c.vol; $('volV').textContent = Math.round(c.vol * 100) + '%'; $('ui').value = c.pz; $('uiV').textContent = Math.round(c.pz * 100) + '%';
   paint();
 }
 $('iGo').onclick = async () => {
@@ -248,7 +255,7 @@ $('save').onclick = async () => {
   const presets = PRESETS.map((d, i) => { const o = old[i] || {}, b = { slip: num($('s' + i).value, 0.1, 100, d.slip), prio: num($('f' + i).value, 0, 0.01, d.prio), tip: num($('t' + i).value, 0, 0.01, d.tip) };
     return Object.assign({}, o, b, { sslip: num($('ss' + i).value, 0.1, 100, o.sslip ?? b.slip), sprio: num($('sf' + i).value, 0, 0.01, o.sprio ?? b.prio), stip: num($('st' + i).value, 0, 0.01, o.stip ?? b.tip) }); });
   await chrome.storage.local.set({ buys: buys.length ? buys : DEF.buys, sells: sells.length ? sells : DEF.sells, quick: num($('quick').value, 0.001, 100, DEF.quick),
-    presets, cTexts: $('cTexts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 50), cAuto: $('cAuto').checked, cMin: num($('cMin').value, 0, 100, 0.5), maxSol: num($('maxSol').value, 0.001, 100, DEF.maxSol), rpc, jupKey: $('jupKey').value.trim(), ...(hkM === 'off' ? { hk: false } : { hk: true, hkMod: hkM, hkBuy: hkB, hkSell: hkS }), pulse: $('pulse').checked, autoSlip: $('autoSlip').checked, autoFee: $('autoFee').value, sound: $('sound').checked, vol: +$('vol').value, pz: +$('ui').value,
+    presets, cTexts: $('cTexts').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 50), cAuto: $('cAuto').checked, cMin: num($('cMin').value, 0, 100, 0.5), maxSol: num($('maxSol').value, 0.001, 100, DEF.maxSol), rpc, jupKey: $('jupKey').value.trim(), ...(hkM === 'off' ? { hk: false } : { hk: true, hkMod: hkM, hkBuy: hkB, hkSell: hkS }), pulse: $('pulse').checked, autoSlip: $('autoSlip').checked, oneTx: $('oneTx').checked, autoSpeed: $('autoSpeed').checked, autoFee: $('autoFee').value, sound: $('sound').checked, vol: +$('vol').value, pz: +$('ui').value,
     ...(bBuys.length === 4 ? { bscBuys: bBuys } : {}), bscSlip: num($('bSlip').value, 0.1, 100, 15), bscGwei: num($('bGwei').value, 0, 100, 0), maxBnb: num($('maxBnb').value, 0.001, 100, 2) });
   saved(); load();
 };

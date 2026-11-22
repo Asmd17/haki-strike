@@ -144,6 +144,11 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid 
 .sv.pv button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:-2px}
 #savV b{color:var(--up)}
 
+/* 3.26.0 Your speed: four numbers */
+.spg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.spg>div{padding:14px 16px;display:grid;gap:4px}.spg>div+div{border-left:1px solid var(--sep)}
+.spg span{color:var(--t3);font-size:12px}.spg b{font-size:18px;line-height:22px;font-weight:600;font-variant-numeric:tabular-nums}
+html:not(.win) .spg{grid-template-columns:repeat(2,minmax(0,1fr))}html:not(.win) .spg>div:nth-child(3){border-left:0}
 /* presets: P1 P2 P3, the chosen one red like the panel's */
 .seg{display:inline-grid;grid-auto-flow:column;gap:2px;padding:3px;border-radius:10px;background:var(--fd);border:1px solid var(--fdb)}
 .seg button{all:unset;height:28px;min-width:44px;padding:0 10px;box-sizing:border-box;border-radius:7px;text-align:center;font:600 12.5px/28px HakiGeist,system-ui,sans-serif;color:var(--t3);cursor:pointer;transition:background-color .12s,color .12s}
@@ -318,8 +323,16 @@ html.win .bar{left:216px;padding:12px 40px}
  <div class="ph"><h1>Speed and fees</h1><p>Three presets, picked on the panel. Each one sets the slippage, priority fee and tip for buys and for sells.</p></div>
  <section>
   <div class="cd">
+   <div class="row"><span class="l"><b>All wallets in one transaction</b><span>Several wallets on a pump.fun coin buy and sell in one transaction: the same block, one fee and one tip</span></span><span class="ctl"><input id="oneTx" type="checkbox" aria-label="All wallets in one transaction"></span></div>
    <div class="row"><span class="l"><b>Anti-sandwich slippage</b><span>Set from how the coin really moves between your click and its block; your preset below is the most it can be</span></span><span class="ctl"><input id="autoSlip" type="checkbox" aria-label="Anti-sandwich slippage"></span></div>
    <div class="row"><span class="l"><b>Smart fees</b><span>Pay what the network needs now; the preset is the most you pay</span></span><span class="ctl"><select id="autoFee" aria-label="Smart fees" class="w-m"><option value="fast">Same speed</option><option value="eco">Cheapest</option><option value="off">Off</option></select></span></div>
+  </div>
+ </section>
+ <section>
+  <div class="sh"><h2>Your speed</h2><span class="n" id="spdN" style="margin-left:auto;font-size:12px"></span></div>
+  <div class="cd">
+   <div class="spg"><div><span>Click to sent</span><b id="spdC">–</b></div><div><span>Sent to landed</span><b id="spdL">–</b></div><div><span>In the next block</span><b id="spdB">–</b></div><div><span>Saved on fees</span><b id="spdS">–</b></div></div>
+   <div class="row"><span class="l"><b>Self-tuning tip</b><span id="spdT">While your trades land in the next block, the tip and priority fee are eased down under your preset; slower landings put them back up</span></span><span class="ctl"><input id="autoSpeed" type="checkbox" aria-label="Self-tuning tip"></span></div>
   </div>
  </section>
  <section>
