@@ -268,6 +268,13 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .wm[hidden]{display:none}
 .wmh{display:flex;align-items:center;gap:8px;height:36px;padding:0 6px 0 12px;border-bottom:1px solid #1E1F23;color:#6B7079;font-weight:500}
 .wmh b{color:#C9CCD1;font-weight:600}
+/* 3.23.0 Paper trading: the switch on top of the wallet menu; when it is on the panel carries an amber line and the wallet button says Paper */
+.wmp{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 12px;border-bottom:1px solid #1E1F23}
+.wmpt{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}.wmpt b{color:#EDEEF0;font-weight:600}.wmpt .pbal{color:#F5A524;font-size:11px}.wmpt .pbal:empty{display:none}
+.wmp .prs{height:24px;padding:0 8px;border-radius:6px;color:#A9ADB4;font-weight:600}.wmp .prs:hover{background:#1E1F23;color:#EDEEF0}
+.p.paper{box-shadow:inset 0 2px 0 #F5A524,0 0 0 1px #2A2D39,0 24px 60px -12px rgba(0,0,0,.85)}
+.p.paper .wal .wn{display:none}.p.paper .wal .wb{display:inline!important;color:#F5A524;font-size:0}.p.paper .wal .wb:before{content:"Paper";font-size:12px;font-weight:600}
+.p.paper .shr{display:none}
 .wmh .sp{flex:1}
 .wmh button{height:24px;padding:0 6px;border-radius:6px;color:#A9ADB4;font-weight:600}.wmh button:hover{background:#1E1F23;color:#EDEEF0}
 .wml{max-height:300px;overflow-y:auto}
@@ -476,6 +483,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
 <div class="msg" role="status" aria-live="polite"></div>
 <div class="shm" hidden><iframe class="shf" title="Share PnL" allow="clipboard-write"></iframe></div>
 <div class="wm" hidden role="menu" aria-label="Wallets">
+ <div class="wmp"><span class="wmpt"><b>Paper trading</b><span class="pbal num"></span></span><button class="prs" type="button" title="Start again with 10 SOL and 1 BNB of play money">Reset</button><label class="aut" title="Practice on live prices with play money: nothing is signed or sent"><input type="checkbox" class="ppr" aria-label="Paper trading"><i class="sw"></i></label></div>
  <div class="wmh">Trade with<b class="wmt"></b><span class="sp"></span><button class="wma" title="Tick every wallet">All</button><button class="wmb" title="Tick the wallets that hold SOL">With SOL</button></div>
  <div class="wml"></div>
  <div class="wmx" hidden></div>
@@ -536,12 +544,12 @@ button.c:active{transform:translateY(1px) scale(.985)}
   let port = null;
   function connect() {
     try { port = chrome.runtime.connect({ name: 'live' }); } catch (_) { port = null; return; }
-    port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if (m.mint || m.raw != null) paintPos(m); });
+    port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
     port.onDisconnect.addListener(() => { port = null; setTimeout(() => { connect(); watchNow(); }, 600); });
   }
   let bscT = 0;
   async function bscPoll(now) {
-    if (!BSCM()) return; const a = A, p = await send('bscPos', { token: a }); if (a !== A || p.err) return;
+    if (!BSCM() || PAPER) return; const a = A, p = await send('bscPos', { token: a }); if (a !== A || p.err || PAPER) return;
     if (p.bnb != null) { bal = p.bnb; paintBal(); }
     const L = await bled(a), val = p.value_bnb || 0, has = BigInt(p.raw || '0') > 0n, pnl = L.out + val - L.in;
     paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null,
@@ -552,10 +560,34 @@ button.c:active{transform:translateY(1px) scale(.985)}
     clearInterval(bscT); bscT = 0;
     if (BSCM()) { if (port) try { port.postMessage({ op: 'watch', a: null }); } catch (_) {} bscPoll(); bscT = setInterval(() => { if (!document.hidden) bscPoll(); }, 1500); return; }
     if (port) try { port.postMessage({ op: 'watch', a: A, isMint: isMintPage() }); } catch (_) {}
+    if (PAPER) paperPoll();
   };
+  setInterval(() => { if (PAPER && A && !document.hidden && !P.hidden) paperPoll(); }, 1500);
   let nW = 1;   /* several wallets: the button shows how many (the SOL of all of them is in the Buy row) */
+  /* 3.23.0 Paper trading: the same panel, the same keys and hotkeys, play money at live prices; nothing is ever signed or sent */
+  let PAPER = false;
+  async function paperPoll() {
+    if (!PAPER || !A || !C) return; const a = A, p = await send('paperPos', { a, isMint: isMintPage() });
+    if (!PAPER || a !== A || !p || p.err) return; bal = p.bal; paintBal(); paintPos(p); paperBal(p.bal);
+  }
+  const paperBal = b => { const e = $('.pbal'); if (e) e.textContent = b == null ? '' : (+b).toFixed(3) + ' ' + CUR(); };
+  async function paperTrade(a, side, v, btn) {
+    const cur = isBsc(a) ? 'BNB' : 'SOL', label = 'Paper ' + (side === 'buy' ? 'buy ' + v + ' ' + cur : 'sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%');
+    if (btn) { if (!btn._n) btn.classList.add('busy'); btn._n = (btn._n || 0) + 1; } status(label + '…');
+    const r = await send('paperTrade', { side, a, isMint: isMintPage(), v });
+    if (btn && !--btn._n) btn.classList.remove('busy');
+    if (!r || r.err) { status(label + ': ' + ((r && r.err) || 'failed'), 'bad'); window.hkSound('fail'); return; }
+    status(label + (side === 'buy' ? ': got ' + fmt(r.got) + ' tokens' : ': got ' + f3(r.got) + ' ' + cur) + ' · play money, nothing sent', 'ok');
+    window.hkSound(side === 'sell' ? 'sell' : 'buy'); paperPoll();
+  }
+  function paperUi() {
+    P.classList.toggle('paper', PAPER); const t = $('.ppr'); if (t) t.checked = PAPER;
+    $('.wal').title = PAPER ? 'Paper trading is on: play money, nothing is sent. Click to switch it off' : 'Wallets: choose which ones trade';
+    if (PAPER) { last = null; paperPoll(); } else { const e = $('.pbal'); if (e) e.textContent = ''; refreshBal(); watchNow(); }
+  }
   const paintBal = () => { const t = bal == null ? '–' : (+bal).toFixed(bal >= 100 ? 1 : 3); $('.wb').textContent = t; $('.wb').hidden = nW > 1; $('.bal').textContent = bal == null ? '–' : (+bal).toFixed(3); };
   async function refreshBal() {
+    if (PAPER) { paperPoll(); return; }
     if (BSCM()) {
       const w = await send('bscWallet'); nW = 1; $('.wn').textContent = ''; $('.wn').classList.remove('on');
       if (!w || w.none) { bal = null; paintBal(); status('Add your BSC wallet: HAKI Strike settings (toolbar icon) → BSC wallet', 'bad'); return; }
@@ -681,6 +713,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
   }
   async function trade(a, side, v, btn) {
     if (!a || (side === 'sell' && selling)) return;
+    if (PAPER) return paperTrade(a, side, v, btn);
     if (isBsc(a)) return tradeBsc(a, side, v, btn);
     if (side === 'buy') nBuy++; else selling = true; lock(); const t0 = Date.now();
     const label = side === 'buy' ? 'Buy ' + v + ' SOL' : 'Sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%';
@@ -947,6 +980,10 @@ button.c:active{transform:translateY(1px) scale(.985)}
   $$('.sxe').forEach(x => { x.onchange = e => { C.sellExact = !!e.target.checked; chrome.storage.local.set({ sellExact: C.sellExact }); paintSet(); }; });
   $('.kbt').onclick = () => { C.hk = !C.hk; chrome.storage.local.set({ hk: C.hk }); build(); };
   $('.cfg').onclick = () => send('openSettings');
+  $('.ppr').onchange = async e => { const r = await send('paperSet', { on: e.target.checked }); PAPER = !!(r && r.on); paperUi(); if (PAPER) status('Paper trading on: play money at live prices, nothing is sent', 'ok'); };
+  $('.prs').onclick = async e => { e.stopPropagation(); const r = await send('paperSet', { reset: true }); paperBal(r && (BSCM() ? r.bnb : r.sol)); if (PAPER) paperPoll(); status('Paper money reset: 10 SOL and 1 BNB', 'ok'); };
+  chrome.storage.local.get({ paper: null }).then(o => { const on = !!(o.paper && o.paper.on); if (on !== PAPER) { PAPER = on; paperUi(); } }).catch(() => {});
+  chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.paper) { const on = !!(ch.paper.newValue && ch.paper.newValue.on); if (on !== PAPER) { PAPER = on; paperUi(); } } });
   $('.mn').onclick = () => { const m = P.classList.toggle('min'); $('.mn').innerHTML = m ? I.max : I.min; chrome.storage.local.set({ min: m }); };
 
   /* hotkeys (the keyboard button, on by default): hold Space, then Q W E R buy, A S D F sell. Works with the chart focused too (its frame
@@ -1170,6 +1207,12 @@ button.c:active{transform:translateY(1px) scale(.985)}
   function qUnmount() { for (const h of document.querySelectorAll('hk-qb')) { const p = h.parentElement; h.remove(); if (p) p.style.visibility = ''; } }
   async function qBuy(h) {
     const row = rowOf(h), a = rowAddr(row); if (!a || h._busy || !new RegExp('^' + B58 + '$').test(a)) return;
+    if (PAPER) {   /* 3.23.0: a quick buy in a list is a paper buy too */
+      const amt = qAmtOf(h.parentElement); h._busy = true; h._b.disabled = true; h._t.textContent = 'Paper…';
+      const r = await send('paperTrade', { side: 'buy', a, isMint: true, v: amt }); h._b.disabled = false; h._t.textContent = r && !r.err ? 'Paper ✓' : 'Failed';
+      if (!r || r.err) status('Paper quick buy: ' + ((r && r.err) || 'failed'), 'bad'); else { status('Paper buy ' + amt + ' SOL · play money, nothing sent', 'ok'); window.hkSound('buy'); }
+      if (P.hidden) P.hidden = false; setTimeout(() => { h._busy = false; h._v = null; if (h.isConnected) qLabel(h); }, 1600); return;
+    }
     const amt = qAmtOf(h.parentElement), t0 = Date.now(); h._busy = true; h._b.disabled = true; h._t.textContent = 'Buying…';
     const r = await send('trade', { side: 'buy', a, sol: amt, key: uid(), isMint: true });
     h._b.disabled = false; h._t.textContent = r.err ? 'Failed' : r.sent === false ? (r.sim_err ? 'Sim failed' : 'Simulated') : 'Sent';
@@ -1344,7 +1387,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
     baseAt = Date.now() + 1500; connect(); route(); setInterval(route, 300);
     refreshBal(); setInterval(() => { if (A && !busy && !document.hidden) refreshBal(); }, 30000);
     addEventListener('resize', () => { const r = P.getBoundingClientRect(); place(r.left, r.top); });
-    chrome.storage.onChanged.addListener(async (ch, area) => { if (area !== 'local' || ch.at || ch.pwid || ch.pkh || ch.ext || ch.sellMode || ch.sellSol || ch.sellSol2 || ch.min || ch.led || ch.cShut2 || ch.pfCalled || ch.sellExact) return; C = await send('cfg'); build(); });
+    chrome.storage.onChanged.addListener(async (ch, area) => { if (area !== 'local' || ch.at || ch.pwid || ch.pkh || ch.paper || ch.iid || ch.tping2 || ch.ext || ch.sellMode || ch.sellSol || ch.sellSol2 || ch.min || ch.led || ch.cShut2 || ch.pfCalled || ch.sellExact) return; C = await send('cfg'); build(); });
   }
   init();
 })();

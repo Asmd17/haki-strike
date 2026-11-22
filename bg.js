@@ -140,6 +140,29 @@ function teleErr(kind, msg) {
   const k = kind + '|' + m, x = EQ.get(k); if (x) x.n++; else if (EQ.size < 20) EQ.set(k, { kind, msg: m, n: 1 });
   if (!eqT) eqT = setTimeout(async () => { eqT = 0; const list = [...EQ.values()]; EQ.clear(); if (list.length && await teleOn()) apiPost('/v1/err', { id: await iid(), ver: VERS, host: LHOST, list }); }, 60000);
 }
+/* 3.23.0 (owner: "paper trading"): practice on live prices with play money. Nothing is signed or sent: a buy or sell is priced exactly
+   like a real one (pump.fun's curve formula with its fee tiers, else a Jupiter quote; BSC: the same quote the real trade uses), the
+   preset's priority fee + tip (gas on BSC) is taken off, and the result is kept here: {on, sol, bnb, pos: {coin: {raw, dec, in, out, nb, ns}}}. */
+const PAPER0 = { sol: 10, bnb: 1 }, WSOL_ = 'So11111111111111111111111111111111111111112', PAPERW = '11111111111111111111111111111111', BSC0 = '0x0000000000000000000000000000000000000001';
+const paperGet = async () => { const { paper } = await chrome.storage.local.get({ paper: null }); const p = paper && typeof paper === 'object' ? paper : {};
+  return { on: !!p.on, sol: +p.sol >= 0 ? +p.sol : PAPER0.sol, bnb: +p.bnb >= 0 ? +p.bnb : PAPER0.bnb, pos: p.pos && typeof p.pos === 'object' ? p.pos : {} }; };
+let PQ = Promise.resolve();
+const paperDo = f => { const r = PQ.then(async () => { const p = await paperGet(); const out = await f(p); await chrome.storage.local.set({ paper: p }); return out; }); PQ = r.catch(() => {}); return r; };
+const paperPnl = (x, val) => { if (!x || !(x.nb || x.ns)) return null; const pnl = x.out + val - x.in; return { bought: x.in, sold: x.out, pnl, pct: x.in > 0 ? pnl / x.in * 100 : null, gas: 0, nb: x.nb, ns: x.ns }; };
+async function paperSolOut(side, m, amt, url) {   /* tokens for lamports (buy) or lamports for tokens (sell), as the real trade would get */
+  const st = await SOLX.pumpState(m, PAPERW, url, 1500), cv = st.curve;
+  if (cv && !cv.complete && cv.quote === WSOL_) { const conf = await SOLX.pumpConf(url), fee = SOLX.feeOf(conf, cv); return { out: side === 'buy' ? SOLX.buyOut(cv, fee, amt) : SOLX.sellOut(cv, fee, amt), st }; }
+  const q = side === 'buy' ? await SOLX.quote(WSOL_, m, String(amt), 500) : await SOLX.quote(m, WSOL_, String(amt), 500);
+  return { out: BigInt(q.outAmount), st };
+}
+const PJX = new Map();   /* mint -> {t, px}: lamports per raw unit from a Jupiter quote, kept 4 s */
+async function paperPx(st, m, url) {
+  const cv = st.curve; if (cv && !cv.complete && cv.quote === WSOL_ && cv.vT > 0n) return Number(cv.vQ) / Number(cv.vT);
+  const h = PJX.get(m); if (h && Date.now() - h.t < 4000) return h.px;
+  const unit = 10n ** BigInt(st.dec || 6), q = await SOLX.quote(m, WSOL_, String(unit), 500), px = Number(q.outAmount) / Number(unit);
+  PJX.set(m, { t: Date.now(), px }); if (PJX.size > 200) PJX.clear(); return px;
+}
+
 self.addEventListener('unhandledrejection', e => teleErr('worker', (e.reason && (e.reason.message || e.reason)) || 'rejection'));
 self.addEventListener('error', e => teleErr('worker', e.message || 'error'));
 
@@ -663,6 +686,49 @@ async function handle(m) {
   }
   if (m.op === 'calloutCheck') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint), v = await pfElig(mint); return { v, left: (PFL.get(mint) || {}).left || 0 }; }
   if (m.op === 'callout') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint);   /* 3.14.3: pump.fun takes BSC coins by their 0x address (x2 boost) */ return pfCallout(mint, a.text, 45000, !!a.update); }
+  if (m.op === 'paperSet') { await paperDo(async P => { if (a.reset) { P.sol = PAPER0.sol; P.bnb = PAPER0.bnb; P.pos = {}; } if (a.on != null) P.on = !!a.on; }); return paperGet(); }
+  if (m.op === 'paperTrade') {   /* {side, a, isMint, v: SOL / BNB to buy or % to sell} */
+    const isB = /^0x[0-9a-fA-F]{40}$/.test(String(a.a || ''));
+    if (isB) {
+      const r = await BSC.route(a.a); if (!BSC.ROUTES.includes(r.route)) throw new Error(r.why || 'no BNB market for this coin');
+      const k = String(r.token).toLowerCase(), GASB = 0.00005, four = r.route === 'four' || r.route === 'four_x';
+      if (a.side === 'buy') {
+        const v = +a.v; if (!(v > 0 && v <= 1000)) throw new Error('amount must be above 0');
+        const out = await BSC.quote(r, 'buy', BigInt(Math.round(v * 1e18))); if (!(out > 0n)) throw new Error('no quote for this trade');
+        return paperDo(async P => { if (v + GASB > P.bnb + 1e-12) throw new Error('not enough paper BNB: ' + P.bnb.toFixed(4) + ' left (Reset it in the wallet menu)');
+          const x = P.pos[k] || (P.pos[k] = { chain: 'bsc', raw: '0', dec: r.dec, in: 0, out: 0, nb: 0, ns: 0 });
+          P.bnb -= v + GASB; x.raw = (BigInt(x.raw) + out).toString(); x.in += v + GASB; x.nb++; return { ok: true, paper: true, side: 'buy', got: Number(out) / 10 ** r.dec, cur: 'BNB', bal: P.bnb }; });
+      }
+      const P0 = await paperGet(), x0 = P0.pos[k], have = x0 ? BigInt(x0.raw) : 0n, pct = Math.max(0, Math.min(100, +a.v || 0));
+      const amt = pct >= 100 ? have : have * BigInt(Math.round(pct * 100)) / 10000n; if (!(amt > 0n)) throw new Error('you hold none of this coin (paper)');
+      const out = await BSC.quote(r, 'sell', four ? amt / 10n ** 9n * 10n ** 9n : amt), got = Math.max(0, Number(out) / 1e18 - GASB);
+      return paperDo(async P => { const x = P.pos[k]; if (!x || BigInt(x.raw) < amt) throw new Error('you hold none of this coin (paper)');
+        P.bnb += got; x.raw = (BigInt(x.raw) - amt).toString(); x.out += got; x.ns++; return { ok: true, paper: true, side: 'sell', got, cur: 'BNB', bal: P.bnb }; });
+    }
+    const url = rpcUrl(c), mint = await SOLX.mintOf(a.a, url, !!a.isMint);
+    if (a.side === 'buy') {
+      const v = +a.v, fe = (+c.prio || 0) + (+c.tip || 0); if (!(v > 0 && v <= 1000)) throw new Error('amount must be above 0');
+      const { out, st } = await paperSolOut('buy', mint, BigInt(Math.round(v * 1e9)), url); if (!(out > 0n)) throw new Error('no tokens for this amount');
+      return paperDo(async P => { if (v + fe > P.sol + 1e-12) throw new Error('not enough paper SOL: ' + P.sol.toFixed(4) + ' left (Reset it in the wallet menu)');
+        const x = P.pos[mint] || (P.pos[mint] = { chain: 'sol', raw: '0', dec: st.dec, in: 0, out: 0, nb: 0, ns: 0 });
+        P.sol -= v + fe; x.raw = (BigInt(x.raw) + out).toString(); x.in += v + fe; x.nb++; return { ok: true, paper: true, side: 'buy', got: Number(out) / 10 ** st.dec, cur: 'SOL', bal: P.sol }; });
+    }
+    const P0 = await paperGet(), x0 = P0.pos[mint], have = x0 ? BigInt(x0.raw) : 0n, pct = Math.max(0, Math.min(100, +a.v || 0));
+    const amt = pct >= 100 ? have : have * BigInt(Math.round(pct * 100)) / 10000n; if (!(amt > 0n)) throw new Error('you hold none of this coin (paper)');
+    const fe = (+c.sprio || 0) + (+c.stip || 0), { out } = await paperSolOut('sell', mint, amt, url), got = Math.max(0, Number(out) / 1e9 - fe);
+    return paperDo(async P => { const x = P.pos[mint]; if (!x || BigInt(x.raw) < amt) throw new Error('you hold none of this coin (paper)');
+      P.sol += got; x.raw = (BigInt(x.raw) - amt).toString(); x.out += got; x.ns++; return { ok: true, paper: true, side: 'sell', got, cur: 'SOL', bal: P.sol }; });
+  }
+  if (m.op === 'paperPos') {   /* the panel's position line, from the paper book, valued at the live price */
+    const P = await paperGet(), isB = /^0x[0-9a-fA-F]{40}$/.test(String(a.a || ''));
+    if (isB) {
+      const p = await BSC.position(a.a, BSC0), x = P.pos[String(p.token).toLowerCase()], raw = x ? BigInt(x.raw) : 0n, ui = Number(raw) / 10 ** p.dec, val = ui * (p.price || 0);
+      return { paper: true, bal: P.bnb, mint: a.a, raw: raw.toString(), ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null, pnl: paperPnl(x, val) };
+    }
+    const url = rpcUrl(c), mint = await SOLX.mintOf(a.a, url, !!a.isMint), x = P.pos[mint], raw = x ? BigInt(x.raw) : 0n;
+    const st = await SOLX.pumpState(mint, PAPERW, url, 1500), px = await paperPx(st, mint, url).catch(() => 0), val = Number(raw) * px / 1e9;
+    return { paper: true, bal: P.sol, mint, raw: raw.toString(), ui: Number(raw) / 10 ** st.dec, dec: st.dec, value_sol: val, mc_sol: px * Number(st.supply) / 1e9, usd: await SOLX.solUsd().catch(() => null), pnl: paperPnl(x, val) };
+  }
   if (m.op === 'report') {   /* 3.22.0: Settings -> Report a problem */
     const text = String(a.text || '').trim().slice(0, 2000); if (text.length < 3) throw new Error('write what happened');
     const W = await walletsAll(), BW = await bwalletsAll(), p = (c.presets || [])[c.preset || 0] || {};

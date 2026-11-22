@@ -20,6 +20,7 @@ See [SECURITY.md](SECURITY.md) for exactly how it works and where to check each 
 - **0% HAKI fee.** You pay only the network fee and the tip you choose. The tip goes to the block, not to us.
 - **Many wallets:** trade with several wallets at once, plus Consolidate and Split.
 - **Auto sell:** Safe 2x, take profit, stop loss and trailing stop.
+- **Paper trading:** practise with play money at live prices, on the same panel. Nothing is signed or sent.
 - **Sell by % or by SOL amount.**
 - **Your own hotkeys:** a key alone, or with Space, Ctrl, Alt or Shift.
 - **Quick buy** right from the lists on Axiom, GMGN and Terminal.
