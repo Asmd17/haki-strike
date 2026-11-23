@@ -765,7 +765,8 @@ async function handle(m) {
   }
   if (m.op === 'calloutCheck') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint), v = await pfElig(mint); return { v, left: (PFL.get(mint) || {}).left || 0 }; }
   if (m.op === 'callout') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint);   /* 3.14.3: pump.fun takes BSC coins by their 0x address (x2 boost) */ return pfCallout(mint, a.text, 45000, !!a.update); }
-  if (m.op === 'snipe') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); if (a.do === 'arm') await licGate(); return SNIPE.op(a, c); }
+  if (m.op === 'snipe') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); if (a.do === 'arm') await licGate(); return SNIPE.op(Object.assign({}, a, { set: undefined, reset: undefined }), c); }
+  if (m.op === 'snipeCfg') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); return SNIPE.op(Object.assign({}, a, { do: 'cfg' }), c); }   /* settings window only (auto trading on / off) */
   if (m.op === 'lic') return a.check ? licHello(true, true) : a.force ? licHello(true) : licHello(false);
   if (m.op === 'licPay') {   /* popup only: pay from one of YOUR wallets to HAKI's address shown in the signed token (never an address from a page) */
     const s = await licHello(true); if (!s.treasury) throw new Error('Payments are not open yet');
@@ -1322,7 +1323,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return false;
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
-  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'licPay'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
+  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
   if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
   handle(m).then(reply, e => { const t = String((e && e.message) || e).slice(0, 220); if (!['tx', 'wallets', 'cfg', 'pos', 'coin'].includes(m.op)) teleErr(m.op, t); reply({ err: t }); });
   return true;

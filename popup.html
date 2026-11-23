@@ -214,6 +214,7 @@ html.win .bar{left:216px;padding:12px 40px}
   <div class="gl">More</div>
   <button role="tab" data-t="l" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M9.25 2.75c2.1.25 3.75 1.9 4 4L8.5 11.5 4.5 7.5z"/><path d="M4.5 7.5 2.75 7.2l1.9-2.05 2.6.2M8.5 11.5l.3 1.75 2.05-1.9-.2-2.6M3.25 12.75l1.25-.35.35-1.25"/></svg>Multi launch</button>
   <button role="tab" data-t="c" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 6.25v3.5h2.25l4.75 3V3.25l-4.75 3z"/><path d="M12 6.1c.65.45 1.05 1.15 1.05 1.9s-.4 1.45-1.05 1.9M5 9.75l.7 3h1.55l-.5-2.75"/></svg>Callout</button>
+  <button role="tab" data-t="m" aria-selected="false" id="snpTab" hidden><svg class="i" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.25"/><circle cx="8" cy="8" r="1.5"/><path d="M8 1.5v2.25M8 12.25v2.25M1.5 8h2.25M12.25 8h2.25"/></svg>Snipe</button>
   <div class="gl">App</div>
   <button role="tab" data-t="s" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M8 1.75 13.25 4v3.75c0 3-2.25 5.4-5.25 6.5-3-1.1-5.25-3.5-5.25-6.5V4z"/><path d="m5.75 8 1.6 1.6 3-3.1"/></svg>Subscription</button>
   <button role="tab" data-t="p" aria-selected="false"><svg class="i" viewBox="0 0 16 16"><path d="M2.75 4.75h6M11.75 4.75h1.5M2.75 11.25h1.5M7.25 11.25h6"/><circle cx="10.25" cy="4.75" r="1.5"/><circle cx="5.75" cy="11.25" r="1.5"/></svg>Panel and sound</button>
@@ -433,6 +434,27 @@ html.win .bar{left:216px;padding:12px 40px}
  </section>
 </div>
 
+<!-- ============ Migration snipe (owner's build only, 3.29.0) ============ -->
+<div data-p="m" hidden>
+ <div class="ph"><h1>Migration snipe</h1><p>Buys a pump.fun coin the moment it moves to its PumpSwap pool and sells it by itself. "Mayhem" pools and pools with little SOL are skipped. Chrome must stay open.</p></div>
+ <section>
+  <div class="cd">
+   <div class="row"><span class="l"><b>Auto: every migration</b><span>Snipes each new migration with the amount below, until the loss cap is reached</span></span><span class="ctl"><input id="snAuto" type="checkbox" aria-label="Auto snipe every migration"></span></div>
+   <div class="row"><span class="l"><b>Amount per snipe</b><span>SOL, from your first unlocked trading wallet</span></span><span class="ctl"><input id="snSol" inputmode="decimal" style="width:96px"></span></div>
+   <div class="row"><span class="l"><b>Sell at profit</b><span>%, after all fees</span></span><span class="ctl"><input id="snTp" inputmode="decimal" style="width:96px"></span></div>
+   <div class="row"><span class="l"><b>Sell at loss</b><span>%, after all fees</span></span><span class="ctl"><input id="snSl" inputmode="decimal" style="width:96px"></span></div>
+   <div class="row"><span class="l"><b>Sell after</b><span>minutes, if neither happened</span></span><span class="ctl"><input id="snHold" inputmode="decimal" style="width:96px"></span></div>
+   <div class="row"><span class="l"><b>Loss cap</b><span>SOL in total: a new snipe only when net loss + what is open + this one stays within it</span></span><span class="ctl"><input id="snCap" inputmode="decimal" style="width:96px"></span></div>
+   <div class="row"><span class="l"><b>Skip pools under</b><span>SOL in the new pool (a normal migration has about 85)</span></span><span class="ctl"><input id="snMinQ" inputmode="decimal" style="width:96px"></span></div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="sec" id="snReset" type="button">Reset results</button><button class="pri" id="snSave" type="button">Save</button></div>
+  <div class="st" id="snSt" role="status" aria-live="polite"></div>
+ </section>
+ <section>
+  <div class="sh"><h2>Results</h2><span class="n" id="snFeed" style="margin-left:auto;font-size:12px"></span></div>
+  <div class="cd"><div class="row"><span class="l"><b id="snNet">–</b><span id="snSum"></span></span></div><div id="snOpen"></div><div id="snHist"></div></div>
+ </section>
+</div>
 <!-- ============ Subscription (3.28.0) ============ -->
 <div data-p="s" hidden>
  <div class="ph"><h1>Subscription</h1><p id="subLead">HAKI Strike is paid by the month. Paper trading is always free, and selling never needs a subscription.</p></div>

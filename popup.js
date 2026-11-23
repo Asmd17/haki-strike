@@ -374,3 +374,21 @@ document.querySelectorAll('[data-cp]').forEach(b => { b.onclick = async () => { 
     const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))); await chrome.storage.local.set({ fp: [...h.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join('') }); } } catch (_) {}
   subLoad(); subWallets();
 })();
+
+/* ---- 3.29.0 migration snipe (only in the owner's build: the tab shows when the background has it) ---- */
+const SN = ['snSol', 'snTp', 'snSl', 'snHold', 'snCap', 'snMinQ'], SNK = ['sol', 'tp', 'sl', 'hold', 'cap', 'minQ'];
+const snRow = (b, s) => { const r = document.createElement('div'); r.className = 'row'; const l = document.createElement('span'); l.className = 'l'; const x = document.createElement('b'); x.textContent = b; const y = document.createElement('span'); y.textContent = s; l.append(x, y); r.append(l); return r; };
+function snPaint(r, fill) {
+  if (!r || r.err) { say('snSt', (r && r.err) || 'No answer', 'bad'); return; }
+  if (fill) { SN.forEach((id, i) => { $(id).value = r.cfg[SNK[i]]; }); $('snAuto').checked = !!r.cfg.auto; }
+  const b = r.book || {}, n = +b.net || 0; $('snNet').textContent = (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(4) + ' SOL'; $('snNet').style.color = n > 0 ? '#3DDC97' : n < 0 ? '#FF5C78' : '';
+  $('snSum').textContent = (b.n || 0) + ' sold · ' + (b.wins || 0) + ' in profit · ' + (b.skipped || 0) + ' skipped · ' + (+r.atRisk || 0).toFixed(3) + ' SOL open · cap ' + r.cfg.cap + ' SOL';
+  $('snFeed').textContent = r.cfg.auto ? (r.feed ? 'Auto on · listening' : 'Auto on · connecting…') : 'Auto off';
+  const O = $('snOpen'); O.textContent = ''; for (const p of r.open || []) O.append(snRow(p.mint.slice(0, 4) + '…' + p.mint.slice(-4) + (p.pnl == null ? '' : ' · ' + (p.pnl >= 0 ? '+' : '') + p.pnl + ' %'), 'open ' + p.age + ' s · ' + p.cost.toFixed(3) + ' SOL in'));
+  const H = $('snHist'); H.textContent = ''; for (const h of (b.hist || []).slice(0, 12)) H.append(snRow(h.mint.slice(0, 4) + '…' + h.mint.slice(-4) + ' · ' + (h.pnl >= 0 ? '+' : '') + h.pnl.toFixed(4) + ' SOL (' + h.pct + ' %)', new Date(h.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · ' + h.why + (h.auto ? ' · auto' : '')));
+}
+async function snLoad(fill) { snPaint(await ask('snipeCfg', {}).catch(() => null), fill); }
+$('snSave').onclick = async () => { const set = { auto: $('snAuto').checked }; SN.forEach((id, i) => { set[SNK[i]] = +String($(id).value).replace(',', '.'); });
+  const r = await ask('snipeCfg', { set }).catch(e => ({ err: String(e.message || e) })); if (r && r.err) { say('snSt', r.err, 'bad'); snLoad(true); return; } snPaint(r, true); say('snSt', set.auto ? 'Saved. Auto snipe is on: keep Chrome open.' : 'Saved.', 'ok'); };
+$('snReset').onclick = async () => { if (!confirm('Reset the snipe results (net, history)? This also frees the loss cap.')) return; snPaint(await ask('snipeCfg', { reset: true }), false); say('snSt', 'Results reset.', 'ok'); };
+ask('cfg').then(c => { if (c && c.snipe) { $('snpTab').hidden = false; snLoad(true); setInterval(() => { if (!document.querySelector('[data-p="m"]').hidden) snLoad(false); }, 3000); } }).catch(() => {});
