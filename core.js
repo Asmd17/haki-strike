@@ -56,7 +56,6 @@ const SOLX = (() => {
     const keys = []; for (let x = 0; x < nk; x++) keys.push(b58e(raw.slice(k + 32 * x, k + 32 * x + 32)));
     return { nsig, sigAt, msgAt: m, need, keys };
   }
-  const b64u = b => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const fromB64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
   const b64 = b => { let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
   const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
