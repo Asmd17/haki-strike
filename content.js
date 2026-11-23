@@ -553,6 +553,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
 .tb .kbt.acc{color:#3DDC97;background:rgba(47,210,138,.14);box-shadow:inset 0 0 0 1px rgba(47,210,138,.6)}
 .tb .kbt:hover{color:#E3E5EB}
 .tb .kbt.acc:hover{color:#5BF0B2}
+.p.paper .wal svg{display:none}.p.paper .wal .wb:before{font-size:10.5px}.p.paper .wal{padding:0 7px}   /* 3.27.6: "Paper" fits the header */
 .tb{height:41px}   /* 40 inside the 1px line: the 18px logo sits on whole pixels */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
