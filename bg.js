@@ -351,11 +351,11 @@ const busy = new Set(), done = new Map();
 
 /* PnL ledger (chrome.storage.local 'led' = {mint: [{t, side, sol, gas, rent, tok, sig}]}): every trade this extension sent is kept as
    pending (storage.session 'pend') and booked once the chain shows it, with the amounts read from the transaction itself. */
-async function pend(sig, mint, side, tipLamports, w) { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); pend[sig] = { mint, side, tip: tipLamports, t: Date.now(), w }; await chrome.storage.session.set({ pend }); }
+async function pend(sig, mint, side, tipLamports, w, pair) { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); pend[sig] = { mint, side, tip: tipLamports, t: Date.now(), w, pair }; await chrome.storage.session.set({ pend }); }
 async function book(c, pub0, only) {
   const { pend = {} } = await chrome.storage.session.get({ pend: {} }); let ch = false;
   for (const [sig, p] of Object.entries(pend)) {
-    if (only && sig !== only) continue;
+    if (only && sig !== only && p.pair !== only) continue;   /* 3.29.6: step 1 of a two-step trade with its step 2 */
     const pub = p.w || pub0;
     let x = null; try { x = await SOLX.txDeltas(sig, pub, p.mint, p.tip, rpcUrl(c)); } catch (_) { x = null; }
     if (!x) { if (Date.now() - p.t > 180000) { delete pend[sig]; ch = true; } continue; }   /* not visible after 3 min: dropped (failed / expired) */
@@ -1067,7 +1067,7 @@ async function handle(m) {
               const o2 = Object.assign({}, x.o, { slip }), r2 = await SOLX.trade(o2, u.seed, u.pub, rpcUrl(c));
               if (r2.sending) { const sp = r2.sending, sg = r2.sig; delete r2.sending; sp.then(() => {}, e => { SIGS.set(sg, { err: { send: String((e && e.message) || e).slice(0, 140) } }); RB.delete(sg); }); }
               if (r2.tx64) { RB.set(r2.sig, { tx64: r2.tx64, t: Date.now(), last: Date.now(), sender: r2.tip >= 0.000005 ? Math.round(r2.tip * 1e9) : 0, o: o2, mint: r2.mint, retried: true, w: u.pub }); delete r2.tx64; }
-              sigWatch(c, r2.sig).catch(() => {}); await pend(r2.sig, r2.mint, r2.side, Math.round(r2.tip * 1e9), u.pub);
+              sigWatch(c, r2.sig).catch(() => {}); await pend(r2.sig, r2.mint, r2.side, Math.round(r2.tip * 1e9), u.pub); if (r2.sig1) await pend(r2.sig1, r2.mint, r2.side, Math.round((r2.tip1 || 0) * 1e9), u.pub, r2.sig);
               RB.delete(a.sig); await book(c, b.pub, a.sig).catch(() => {});
               return { st: 'retry', sig: r2.sig, why: kind === 'slip' ? 'price moved past your ' + x.o.slip + '% slippage' : kind === 'budget' ? 'it needed more compute' : 'the coin migrated on the way', slip, ms: r2.ms };
             } catch (e) { r.why += '; second try not sent: ' + String(e.message || e).slice(0, 120); }
@@ -1112,7 +1112,7 @@ async function handle(m) {
             o: Object.assign({ side: a.side, a: a.a, sol: a.sol, pct: a.pct, isMint: !!a.isMint, maxSol: c.maxSol }, fz) }); delete r.tx64; }
           if (r.side === 'buy' && hb) hb.v -= Math.round((+a.sol + r.tip) * 1e9);   /* until the next read */
           if (r.sent) { sigWatch(c, r.sig).catch(() => {}); pend(r.sig, r.mint, r.side, Math.round(r.tip * 1e9), u.pub).catch(() => {}); landNote(r.sig, Object.assign({ cap: fz.cap }, r), c); }   /* the ledger note is not on the click's path */
-          if (r.sent && r.sig1) await pend(r.sig1, r.mint, r.side, Math.round((r.tip1 || 0) * 1e9), u.pub);   /* 3.8.6 two steps: both count for PnL (SOL in one, tokens in the other) */
+          if (r.sent && r.sig1) await pend(r.sig1, r.mint, r.side, Math.round((r.tip1 || 0) * 1e9), u.pub, r.sig);   /* 3.8.6 two steps: both count for PnL (SOL in one, tokens in the other) */
           return Object.assign(r, { w: w.pub, label: w.label });
         } catch (e) { return { w: w.pub, label: w.label, err: String((e && e.message) || e).slice(0, 160) }; }
       };

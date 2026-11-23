@@ -239,6 +239,14 @@ const SOLX = (() => {
       let q;
       try { q = side === 'buy' ? await quote(WSOL, m, String(x), slipBps) : await quote(m, WSOL, String(x), slipBps); }
       catch (e) { if (!(qm && qm !== WSOL && NOROUTE.test(String(e.message)))) throw e; NOQ.set(m, Date.now()); if (NOQ.size > 500) NOQ.clear(); return viaQuote(side, m, x, slipBps, qm, o, pub, url, soft); }
+      /* 3.29.6 (owner 1123, a USD-quoted pump.fun coin: "price impact 93 % is too high" on a $70 sell): the direct route went through a dead
+         pool. Over 5 % impact: the route through the coin's quote token is tried too and the one that gives more wins; none in one
+         transaction and the direct one is unusable -> two steps */
+      const imp0 = (+q.priceImpactPct || 0) * 100;
+      if (qm && qm !== WSOL && imp0 > 5) {
+        try { const v = await viaQuote(side, m, x, slipBps, qm, o, pub, url, soft); if (BigInt(v.q.outAmount) > BigInt(q.outAmount)) { NOQ.set(m, Date.now()); if (NOQ.size > 500) NOQ.clear(); return v; } }
+        catch (e) { if (imp0 > MAX_IMPACT) { NOQ.set(m, Date.now()); if (e.two || soft) throw e; } }   /* a hover never pre-builds the dead direct route */
+      }
       let e1;
       try { const b = await jupIx(q, pub, o, url, soft); return { q, msg: b.msg, tip: b.tip, t: Date.now() }; }
       catch (e) { if (soft || e.vet) throw e; e1 = e; }
@@ -283,7 +291,7 @@ const SOLX = (() => {
       x = sellAmount(st ? st.raw : (await tokBal(pub, m, url)).raw, pct); if (x <= 0n) throw new Error('you hold none of this token');
     } else throw new Error('side must be buy or sell');
     lap.st = Date.now() - t0;
-    const oo = Object.assign({}, o, { slip, tip, prio, _lap: lap }), k = pkey(m, o.side, x, oo, pub), P = PREP.get(k);
+    const oo = Object.assign({}, o, { slip, tip, prio, _lap: lap, _spot: o.side === 'sell' ? spotSol(st, x) : null }), k = pkey(m, o.side, x, oo, pub), P = PREP.get(k);
     const miss = P ? '' : PMISS.get(pub + '|' + m + '|' + o.side) || ([...PREP.keys()].some(q => q.startsWith(pub + '|' + m + '|' + o.side + '|')) ? 'amount or fee changed' : 'not hovered long enough');   /* 3.12.4: the real reason (a failed hover build) first */
     PREP.delete(k);   /* taken at once: a second click right after builds its own transaction */
     let ready = P && (P.msg || P.raw) && Date.now() - P.t < PREP_MS ? P : null;
@@ -294,7 +302,10 @@ const SOLX = (() => {
     if (have != null && have / 1e9 < sol + tip + prio + FEE_RESERVE) throw new Error('not enough SOL: the wallet has ' + (have / 1e9).toFixed(4) + ', this needs about ' + (sol + tip + prio + FEE_RESERVE).toFixed(4));
     lap.route = Date.now() - t0 - lap.st;
     if (b.two) return twoStep(o.side, m, x, Math.round(slip * 100), st.curve.quote, oo, seed, pub, url, t0, b.q1);
-    const imp = (+b.q.priceImpactPct || 0) * 100;
+    let imp = (+b.q.priceImpactPct || 0) * 100;
+    { const out = +b.q.outAmount, v = o.side === 'sell' ? oo._spot : (out > 0 ? spotSol(st, BigInt(b.q.outAmount)) : null);   /* 3.29.6: ours when we know the price */
+      const own = o.side === 'sell' ? (v > 0 && out > 0 ? (1 - out / 1e9 / v) * 100 : null) : (v > 0 && sol > 0 ? (1 - v / sol) * 100 : null);
+      if (own != null && isFinite(own)) imp = Math.max(0, own); }
     if (imp > MAX_IMPACT) throw new Error('price impact ' + imp.toFixed(0) + ' % is too high');
     /* 3.12.22 Exact: a route quoted after the click (Jupiter, a coin paired to USDC / another coin) is checked against the MC the panel showed at
        the click; allowed = the Exact % + the route's own price impact + 1.5 % for pool fees. Further = not sent (owner 1120: 170K -> 182K) */
@@ -343,7 +354,10 @@ const SOLX = (() => {
      not all-or-nothing: if the second step fails, the quote coin stays in the wallet and the error says so. */
   async function twoStep(side, m, x, slipBps, qm, o, seed, pub, url, t0, pq1) {
     const q1 = pq1 && pq1.inAmount === String(x) ? pq1 : side === 'buy' ? await quote(WSOL, qm, String(x), slipBps) : await quote(m, qm, String(x), slipBps);
-    const imp1 = (+q1.priceImpactPct || 0) * 100; if (imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
+    let imp1 = (+q1.priceImpactPct || 0) * 100;
+    { const rate = quoteRateCached(qm), base = side === 'buy' ? Number(x) : (+o._spot || 0) * 1e9;   /* 3.29.6: step 1 measured from our prices (lamports per quote unit) */
+      if (rate > 0 && base > 0 && +q1.outAmount > 0) imp1 = Math.max(0, (1 - Number(q1.outAmount) * rate / base) * 100); }
+    if (imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
     const [[mi], b1] = await Promise.all([accs([qm], url), jupIx(q1, pub, o, url, false)]); if (!mi || !TOKEN_PROGS.includes(mi.owner)) throw new Error('quote coin not found');
     const qa = await ata(pub, mi.owner, qm), held = async () => { const [a] = await accs([qa], url); return a && a.data.length >= 72 ? u64(a.data, 64) : 0n; };
     const [before, sg1] = await Promise.all([held(), sign(seed, b1.msg)]), tx1 = b64(cat(Uint8Array.of(1), sg1, b1.msg)), sig1 = b58e(sg1);
@@ -976,6 +990,13 @@ const SOLX = (() => {
   }
   function poolSell(P, conf, supply, amt) { if (amt <= 0n || P.B <= 0n) return 0n; const gross = P.Q * amt / (P.B + amt), f = ceilDiv(gross * poolFee(conf, P, supply), 10000n); return gross > f ? gross - f : 0n; }
   /* value of st.raw in SOL from what is cached: synchronous, for the live feed */
+  /* 3.29.6 (owner 1123: a $70 sell of a coin quoted in another pump.fun coin refused, "price impact 93 %", the real loss 0.4 %): Jupiter's
+     priceImpactPct is wrong for pump.fun curve legs (seen: "1" = 100 % on a 0.35 % route). The impact is measured from our own spot price */
+  function spotSol(st, raw) {
+    if (!st || !st.curve || !(raw > 0n)) return null; const rate = quoteRateCached(st.curve.quote); if (rate == null) return null; const P = st.pool || st.hpool;
+    const px = st.curve.complete ? (P && P.B > 0n && P.Q > 0n ? Number(P.Q) / Number(P.B) : null) : (st.curve.vT > 0n ? Number(st.curve.vQ) / Number(st.curve.vT) : null);
+    return px == null ? null : Number(raw) * px * rate / 1e9;
+  }
   function valueNow(st) {   /* market value like the terminals show it: tokens x the current price (no sell fee, no price impact) */
     if (!st || st.raw <= 0n) return 0;
     const rate = st.curve ? quoteRateCached(st.curve.quote) : null; if (rate == null) return null;
