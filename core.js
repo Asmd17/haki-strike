@@ -210,8 +210,9 @@ const SOLX = (() => {
     let held = 0n;
     const keep = q => { const out = Number(q.outAmount), v = BigInt(Math.floor(out * LEG_KEEP)), cap = BigInt(Math.floor(out * 0.05)); if (v <= 0n) throw new Error('no route: the quote coin leg gives nothing'); return (v + (held < cap ? held : cap)).toString(); };
     const pairs = [];   /* [q1, q2] in order of preference */
-    if (side === 'buy') { const [L, h] = await Promise.all([solLegs(WSOL, qm, String(x), slipBps), heldP]); held = h; for (const q1 of L) pairs.push([q1, null]); }
-    else { const [q1, h] = await Promise.all([quote(m, qm, String(x), slipBps, LEG_ACC), heldP]); held = h; for (const q2 of await solLegs(qm, WSOL, keep(q1), slipBps)) pairs.push([q1, q2]); }
+    let fullP = null;   /* 3.29.8: the second leg with no account limit (what two separate transactions get) */
+    if (side === 'buy') { const [L, h] = await Promise.all([solLegs(WSOL, qm, String(x), slipBps), heldP]); held = h; for (const q1 of L) pairs.push([q1, null]); fullP = quote(qm, m, keep(L[0]), slipBps).catch(() => null); }
+    else { const [q1, h] = await Promise.all([quote(m, qm, String(x), slipBps, LEG_ACC), heldP]); held = h; fullP = quote(qm, WSOL, keep(q1), slipBps).catch(() => null); for (const q2 of await solLegs(qm, WSOL, keep(q1), slipBps)) pairs.push([q1, q2]); }
     /* 3.9.9 (owner 1118: "5 s to sell"): every candidate is built at the same time (was one after another, ~0.3 s per miss), the first
        that fits one transaction in order of output wins */
     const SIZE = /too big|too many accounts/;
@@ -219,6 +220,10 @@ const SOLX = (() => {
       try { if (!q2) q2 = await quote(qm, m, keep(q1), slipBps, LEG_ACC); return { q1, q2, b: await jupIx(q1, pub, o, url, soft, q2) }; } catch (e) { return { e }; }
     }));
     const ok = built.find(r => r.b);
+    /* 3.29.8 (owner 1123 lost ~0.89 SOL: jackat -> JACKET -> SOL in one transaction, the 40-account second leg went through a tiny Meteora pool,
+       0.038 SOL where the free route gave 0.926): the one-transaction route more than 5 % under the free one -> two transactions */
+    const full = await fullP;
+    if (ok && full && BigInt(ok.q2.outAmount) * 100n < BigInt(full.outAmount) * 95n) { const e = new Error('TWOTX'); e.two = true; e.q1 = ok.q1; throw e; }
     if (ok) {
       const { q1, q2, b } = ok;
       /* what trade() reads: in = SOL / tokens actually turned into the coin / SOL, out = what the second leg gives, impacts added up */
@@ -305,8 +310,8 @@ const SOLX = (() => {
     let imp = (+b.q.priceImpactPct || 0) * 100;
     { const out = +b.q.outAmount, v = o.side === 'sell' ? oo._spot : (out > 0 ? spotSol(st, BigInt(b.q.outAmount)) : null);   /* 3.29.6: ours when we know the price */
       const own = o.side === 'sell' ? (v > 0 && out > 0 ? (1 - out / 1e9 / v) * 100 : null) : (v > 0 && sol > 0 ? (1 - v / sol) * 100 : null);
-      if (own != null && isFinite(own)) imp = Math.max(0, own); }
-    if (o.side === 'buy' && imp > MAX_IMPACT) throw new Error('price impact ' + imp.toFixed(0) + ' % is too high');
+      if (own != null && isFinite(own)) imp = Math.max(0, own); else if (o.side === 'sell') imp = 0; }   /* 3.29.8: a sell is refused only on a loss we measured ourselves */
+    if (imp > MAX_IMPACT) throw new Error(o.side === 'sell' ? 'this route would lose ' + imp.toFixed(0) + ' % of the position (only ' + (+b.q.outAmount / 1e9).toFixed(4) + ' SOL back): not sold' : 'price impact ' + imp.toFixed(0) + ' % is too high');
     /* 3.12.22 Exact: a route quoted after the click (Jupiter, a coin paired to USDC / another coin) is checked against the MC the panel showed at
        the click; allowed = the Exact % + the route's own price impact + 1.5 % for pool fees. Further = not sent (owner 1120: 170K -> 182K) */
     if (o.exact && +o.mcClick > 0 && st && st.supply > 0n && +b.q.inAmount > 0 && +b.q.outAmount > 0) {
@@ -338,7 +343,7 @@ const SOLX = (() => {
     } else if (o.side === 'sell') { if (!(+o.pct > 0 && +o.pct <= 100)) throw new Error('sell percent must be 1-100'); if (st.raw <= 0n) throw new Error('you hold none of this token'); }
     else throw new Error('side must be buy or sell');
     const b = await pumpBuild(Object.assign({}, o, { tip }), st, pub, url);
-    if (o.side === 'buy' && b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
+    if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
     const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre, route: ['pump.fun'], native: true, tx64,
       mc0: Number(st.curve.vQ) * Number(st.supply) / Number(st.curve.vT) / 1e9, sup: st.supply.toString() };
@@ -356,8 +361,8 @@ const SOLX = (() => {
     const q1 = pq1 && pq1.inAmount === String(x) ? pq1 : side === 'buy' ? await quote(WSOL, qm, String(x), slipBps) : await quote(m, qm, String(x), slipBps);
     let imp1 = (+q1.priceImpactPct || 0) * 100;
     { const rate = quoteRateCached(qm), base = side === 'buy' ? Number(x) : (+o._spot || 0) * 1e9;   /* 3.29.6: step 1 measured from our prices (lamports per quote unit) */
-      if (rate > 0 && base > 0 && +q1.outAmount > 0) imp1 = Math.max(0, (1 - Number(q1.outAmount) * rate / base) * 100); }
-    if (side === 'buy' && imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
+      if (rate > 0 && base > 0 && +q1.outAmount > 0) imp1 = Math.max(0, (1 - Number(q1.outAmount) * rate / base) * 100); else if (side === 'sell') imp1 = 0; }
+    if (imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
     const [[mi], b1] = await Promise.all([accs([qm], url), jupIx(q1, pub, o, url, false)]); if (!mi || !TOKEN_PROGS.includes(mi.owner)) throw new Error('quote coin not found');
     const qa = await ata(pub, mi.owner, qm), held = async () => { const [a] = await accs([qa], url); return a && a.data.length >= 72 ? u64(a.data, 64) : 0n; };
     const [before, sg1] = await Promise.all([held(), sign(seed, b1.msg)]), tx1 = b64(cat(Uint8Array.of(1), sg1, b1.msg)), sig1 = b58e(sg1);
@@ -389,6 +394,8 @@ const SOLX = (() => {
         if (msg2) { const sg = await sign(seed, msg2); tx64 = b64(cat(Uint8Array.of(1), sg, msg2)); sig = b58e(sg); }
         else { const [signed, s2] = await signTx(raw2, seed, pub); tx64 = b64(signed); sig = s2; }
       }
+      { const rate = quoteRateCached(qm), exp = Number(got) * (rate || 0);   /* 3.29.8 */
+        if (side === 'sell' && exp > 0 && Number(q2.outAmount) < exp * (1 - MAX_IMPACT / 100)) throw new Error('its route gives only ' + (Number(q2.outAmount) / 1e9).toFixed(4) + ' SOL for ' + (exp / 1e9).toFixed(4) + ' SOL of the quote coin, not sent'); }
       const via = msg2 ? await sendFast(tx64, url, tip2 >= 5000 ? tip2 : 0) : await sendAll(tx64, url);
       return { ok: true, side, mint: m, sig, sig1, steps: 2, sent: true, via, tx64, impact: +(imp1 + (+q2.priceImpactPct || 0) * 100).toFixed(2), tip: tip2 / 1e9, tip1: b1.tip / 1e9, prio: o.prio,
         fast: !!msg2, route: [...(q1.routePlan || []), ...(q2.routePlan || [])].map(r => (r.swapInfo || {}).label), ms: Date.now() - t0 };
@@ -977,7 +984,7 @@ const SOLX = (() => {
     } else if (o.side === 'sell') { if (!(+o.pct > 0 && +o.pct <= 100)) throw new Error('sell percent must be 1-100'); if (st.raw <= 0n) throw new Error('you hold none of this token'); }
     else throw new Error('side must be buy or sell');
     const b = await poolBuild(Object.assign({}, o, { tip }), st, P, pub, url);
-    if (o.side === 'buy' && b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
+    if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
     const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre: !!(st.live && st.pool), route: ['PumpSwap'], native: true, pool: true, tx64,
       mc0: Number(P.Q) * Number(st.supply) / Number(P.B) / 1e9, sup: st.supply.toString() };
