@@ -211,7 +211,7 @@ const feeOf = (c, side) => Object.assign(side === 'sell' ? { slip: c.sslip, prio
 /* 3.12.21 (owner 1120: "I sell at 12K, it fills at 10K"): Exact sell. A sell you click fills within 2 % of what the coin gives at the
    click (the quote at the click already has the pump.fun fee and your own size in it) or not at all: no fill far below the price you saw,
    and no automatic second try with more slippage. Auto sell (take profit / stop) keeps the preset's slippage: a stop must fill. */
-const EXACT = false;   /* 3.18.4 (owner: "Exact is not needed"): trades use the preset slippage; the switch is gone from the panel */
+/* 3.18.4 (owner: "Exact is not needed"): trades use the preset slippage */
 /* 3.26.0 (owner: "self-tuning speed"): every trade's way to the chain is measured (the click -> sent time, and the slots from sending to
    landing, both slots from the WebSocket). While your trades of a preset keep landing in the next block, its tip and priority fee are
    eased down (x0.85 after 4 in a row); one that needs 3+ slots puts them back up (x1.4), a trade that does not land puts them back to
@@ -234,7 +234,7 @@ const feeT = (c, side, auto) => { const f = feeT0(c, side, auto);
     if (fac < 0.999) { const t0 = +f.tip || 0, p0 = +f.prio || 0; f.cap = t0 + p0;
       f.tip = Math.min(t0, t0 >= 0.001 ? Math.max(0.001, t0 * fac) : Math.max(0.0002, t0 * fac)); f.prio = Math.min(p0, Math.max(0.00002, p0 * fac)); } }
   return f; };
-const feeT0 = (c, side, auto) => { const f = feeOf(c, side); if (!auto && EXACT && c.sellExact !== false) {   /* 3.12.22: buys too (owner 1120: 'clicked at 170K, filled at 182K') */ f.slip = Math.min(f.slip, Math.max(0.5, side === 'buy' ? (+c.exactTolBuy || 5) : (+c.exactTol || 2))); f.exact = true; }   /* 3.12.24: buys 5 %, sells 2 % (owner 1120) */ return f; };
+const feeT0 = (c, side) => feeOf(c, side);
 const BAL = { v: null, t: 0 }, BALS = new Map();   /* BALS: each wallet's last balance read */   /* the last balance read (state / pos): a buy checks against it instead of asking the node again */
 /* wallets: a single 'box' from before 3.4 becomes Wallet 1 (kept in place, nothing re-sealed) */
 async function walletsAll() {

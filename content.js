@@ -110,30 +110,28 @@
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
 .num,.n{font-variant-numeric:tabular-nums}
 .p,.pw,.wm{transform-origin:0 0;font-feature-settings:"tnum" 1;text-rendering:optimizeLegibility}
-.p{position:fixed;width:300px;color:#EDEEF0;font-size:12px;line-height:16px;user-select:none;overflow:hidden;border-radius:14px;
- background:linear-gradient(180deg,#16171B 0,#111215 140px);box-shadow:0 0 0 1px rgba(255,255,255,.07),inset 0 1px 0 rgba(255,255,255,.05),0 24px 48px -16px rgba(0,0,0,.85)}
+.p{position:fixed;color:#EDEEF0;line-height:16px;user-select:none;overflow:hidden}
 .sol{width:12px;height:12px;flex:none;display:block}
 .up{color:#37D399!important}.dn{color:#F0596B!important}
 button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 /* header: logo, presets, wallets, tools (drag the panel by it) */
-.tb{position:relative;display:flex;align-items:center;gap:2px;height:40px;padding:0 6px 0 12px;border-bottom:1px solid #1C1D21;cursor:grab}
+.tb{position:relative;display:flex;align-items:center;cursor:grab}
 .tb:active{cursor:grabbing}
-.grip{display:none}
-.tb .mk{width:18px;height:18px;margin-right:8px;flex:none;pointer-events:none;display:block}
-.tabs{display:flex;align-self:stretch;flex:none}
-.tabs button{position:relative;padding:0 7px;font-weight:600;font-size:12px;color:#5F646D;transition:color .12s}
-.tabs button:hover{color:#C9CCD1}
-.tabs button.on{color:#EDEEF0}
+.tb .mk{flex:none;pointer-events:none;display:block}
+.tabs{display:flex;flex:none}
+.tabs button{position:relative;transition:color .12s}
+
+
 .tabs button.on:after{content:"";position:absolute;left:7px;right:7px;bottom:-1px;height:1.5px;border-radius:1px;background:#EDEEF0}
 .tabs .pd{display:none}
 .sp{flex:1}
-.ib{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:#7C818A;flex:none;transition:background-color .12s,color .12s}
-.ib:hover{background:#1C1D21;color:#EDEEF0}
+.ib{display:grid;place-items:center;flex:none;transition:background-color .12s,color .12s}
+
 .ib svg{width:15px;height:15px}
-.ib.acc,.edt.on{color:#EDEEF0;background:#1C1D21}
-.wal{display:flex;align-items:center;gap:5px;height:26px;padding:0 5px 0 7px;margin-right:2px;border-radius:7px;color:#C9CCD1;font-weight:600;flex:none}
-.wal svg{width:14px;height:14px;color:#8A8F98}.wal .cv{width:12px;height:12px;color:#5F646D}
-.wal:hover,.wal.on{background:#1C1D21;color:#EDEEF0}
+
+.wal{display:flex;align-items:center;gap:5px;margin-right:2px;font-weight:600;flex:none}
+.wal svg{width:14px;height:14px}.wal .cv{width:12px;height:12px;color:#5F646D}
+.wal:hover,.wal.on{color:#EDEEF0}
 .wn{display:none}.wn.on{display:inline}.wb[hidden]{display:none}
 /* PnL, the live line of this position, Bought / Sold / Holding + Share */
 .hero{display:grid;grid-template-columns:1fr auto;align-items:end;column-gap:8px;padding:10px 12px 0}
@@ -150,49 +148,40 @@ button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 .spk .spf{fill:url(#hkSpf);stroke:none}
 .hero.loss .spk .spl{stroke:#F0596B}.hero.loss .spk .spf{fill:url(#hkSpfD)}
 .spk.no{visibility:hidden}
-.stt{grid-column:1/-1;display:flex;align-items:center;margin-top:8px;padding:7px 0 8px;border-top:1px solid #1C1D21}
-.stt>div{flex:1;min-width:0}
-.stt .k2{display:block;font-size:11px;line-height:14px;color:#5F646D}
-.stt .v2{display:flex;align-items:center;gap:4px;margin-top:1px;font-weight:600;font-size:12px;line-height:16px;color:#EDEEF0;white-space:nowrap;overflow:hidden}
-.stt .v2 b,.stt .v2 .ph{font-weight:600;overflow:hidden;text-overflow:ellipsis}
-.stt .un{display:inline-flex}
 .shr{flex:none;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:#7C818A;box-shadow:inset 0 0 0 1px #24262B}
 .shr:hover{color:#EDEEF0;background:#1C1D21}.shr svg{width:13px;height:13px}.shr:disabled{opacity:.5}
 /* Buy / Sell */
-.side{padding:8px 12px 0;border-top:1px solid #1C1D21}
+
 .p.min .side,.p.min .updb{display:none}
-.hd{display:flex;align-items:center;gap:6px;height:20px;margin-bottom:6px}
-.lb{font-size:12px;font-weight:600;color:#EDEEF0}
-.ccy{display:none}
-.rt{margin-left:auto;display:flex;align-items:center;gap:4px;color:#6B7079;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.rt b{color:#C9CCD1;font-weight:600}
-.init{flex:none;margin-left:8px;color:#F0596B;font-weight:600;font-size:12px}
+.hd{display:flex;align-items:center;gap:6px}
+
+
+.rt{margin-left:auto;display:flex;align-items:center;gap:4px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+
+.init{flex:none;margin-left:8px;font-size:12px}
 .init svg{display:none}
 .init:hover:not(:disabled){color:#FF8090}.init:disabled{color:#4A3036;cursor:default}
-.rail{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-button.c{position:relative;height:34px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;line-height:16px;font-weight:600;
- background:linear-gradient(180deg,#1C1D22,#16171B);box-shadow:inset 0 1px 0 rgba(255,255,255,.065),inset 0 0 0 1px #232429,0 1px 0 rgba(0,0,0,.7),0 2px 5px -2px rgba(0,0,0,.6);
- transition:background-color .12s,box-shadow .12s,color .12s}
-.rb button.c{color:#37D399}.rs button.c{color:#F0596B;height:38px}
+.rail{display:grid;grid-template-columns:repeat(4,1fr)}
+button.c{position:relative;height:34px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;line-height:16px;font-weight:600;background:linear-gradient(180deg,#1C1D22,#16171B);box-shadow:inset 0 1px 0 rgba(255,255,255,.065),inset 0 0 0 1px #232429,0 1px 0 rgba(0,0,0,.7),0 2px 5px -2px rgba(0,0,0,.6)}
+.rs button.c{height:38px}
 button.c .sol{display:none}
 button.c sub{display:none}
-button.c small{font-size:10px;line-height:12px;font-weight:500;color:#5F646D}
-.rb button.c:hover,.rb button.c:focus-visible{outline:0;background:linear-gradient(180deg,#1A2A23,#15211C);box-shadow:inset 0 1px 0 rgba(140,255,205,.1),inset 0 0 0 1px rgba(55,211,153,.4),0 1px 0 rgba(0,0,0,.7)}
-.rs button.c:hover,.rs button.c:focus-visible{outline:0;background:linear-gradient(180deg,#2A1B1F,#21161A);box-shadow:inset 0 1px 0 rgba(255,160,170,.1),inset 0 0 0 1px rgba(240,89,107,.4),0 1px 0 rgba(0,0,0,.7)}
-button.c:active{transform:translateY(1px)}
+button.c small{line-height:12px}
+.rb button.c:hover,.rb button.c:focus-visible{outline:0}
+.rs button.c:hover,.rs button.c:focus-visible{outline:0}
+
 .c kbd{display:none;position:absolute;right:5px;bottom:3px;font:500 8.5px/10px HakiGeist,Geist,system-ui,sans-serif;color:#3F4249}
 .p.hk .c kbd{display:block}
-.rail.off button.c{color:#3A3D44;pointer-events:none}.rail.off button.c small{color:#2E3036}
+.rail.off button.c{pointer-events:none}
 button.c.busy{overflow:hidden}
-.rb button.c.busy{background:rgba(55,211,153,.1)}.rs button.c.busy{background:rgba(240,89,107,.1)}
+
 button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;height:2px;border-radius:1px;background:currentColor;animation:hkrun .9s linear infinite}
 @keyframes hkrun{to{left:100%}}
-.set{display:flex;align-items:center;gap:12px;height:28px;color:#5F646D;font-weight:500;white-space:nowrap}
-.set b{color:#A9ADB4;font-weight:500}
+.set{display:flex;align-items:center;font-weight:500;white-space:nowrap}
+
 .set .gu{display:none}
-.set .fast{display:flex;align-items:center;gap:5px}.set .fast .dot{width:5px;height:5px;border-radius:50%;background:#37D399;display:block}.set .fast.no .dot{background:#4A4D54}
-.adv{margin-left:auto;color:#A9ADB4;font-weight:500}.adv:hover{color:#EDEEF0}
-.set .sxl{margin-left:auto}
+.set .fast{display:flex;align-items:center;gap:5px}
+.adv{margin-left:auto;font-weight:500}
 .cus{display:none;gap:6px;margin-bottom:8px}.cus.on{display:flex}
 .cus input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 10px;font:13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0}
 .cus input:focus{border-color:#4A4D54}
@@ -202,12 +191,12 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .aut input{position:absolute;opacity:0;width:1px;height:1px}
 .sw{position:relative;width:26px;height:15px;border-radius:8px;background:#26282D;transition:background-color .15s;flex:none}
 .sw:after{content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#6B7079;transition:transform .15s,background-color .15s}
-.aut input:checked+.sw{background:#2FBF86}.aut input:checked+.sw:after{transform:translateX(11px);background:#fff}
+.aut input:checked+.sw:after{transform:translateX(11px);background:#fff}
 .aut input:focus-visible+.sw{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 /* Auto sell / Callout: one quiet row each, open below */
-.sa,.sc{padding:0 12px;border-top:1px solid #1C1D21}
-.sa .hd,.sc .hd{height:34px;margin:0}
-.atg,.ctg{display:flex;align-items:center;gap:4px;font-weight:500;color:#C9CCD1;font-size:12px}
+
+.sa .hd,.sc .hd{margin:0}
+.atg,.ctg{display:flex;align-items:center;gap:4px;font-size:12px}
 .atg svg,.ctg svg{width:12px;height:12px;color:#4A4D54;transition:transform .15s}
 .sa.shut .atg svg,.sc.shut .ctg svg{transform:rotate(-90deg)}
 .ast,.cst{margin-left:6px!important;margin-right:auto;color:#5F646D;max-width:120px}.ast.on,.cst.ok{color:#6B7079}.cst.bad{color:#F0596B}
@@ -231,18 +220,16 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .cpost{width:64px;height:32px;border-radius:8px;background:#EDEEF0;color:#111215;font-weight:600;flex:none}.cpost:disabled{opacity:.5;cursor:default}
 /* 3.16.3 (owner: "the message is too big, the panel grows and feels laggy"): one short line floating next to the panel, it never
    moves the panel; the full text on hover; it goes by itself */
-.msg{position:fixed;z-index:1;display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:9px;background:#16171B;color:#C9CCD1;font-size:12px;line-height:16px;font-weight:500;
- white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 12px 28px -8px rgba(0,0,0,.8);opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity .14s ease,transform .14s ease;transform-origin:0 0}
-.msg:before{content:"";width:6px;height:6px;border-radius:50%;background:#6B7079;flex:none}
-.msg.on{opacity:1;transform:none;pointer-events:auto}
-.msg.ok{color:#EDEEF0}.msg.ok:before{background:#37D399}.msg.bad{color:#FFB3BC}.msg.bad:before{background:#F0596B}
+.msg{position:fixed;z-index:1;display:flex;align-items:center;font-size:12px;line-height:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;pointer-events:none;transform-origin:0 0}
+.msg:before{content:"";flex:none}
+.msg.on{opacity:1;pointer-events:auto}
+.msg.ok:before{background:#37D399}.msg.bad:before{background:#F0596B}
 .msg span{overflow:hidden;text-overflow:ellipsis}
 .set .sl.asl{color:#3DDC97}
 .snp{height:22px;margin-left:6px;padding:0 8px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;color:#C9CCD1;font-size:11.5px;font-weight:600}
 .snp:hover{color:#fff;background:#252834}
 /* 3.25.0 (owner: "the pop-up under the panel is not harmonious"): a status bar under the panel, exactly its width */
-.msg{box-sizing:border-box;height:36px;gap:10px;padding:0 8px 0 10px;border-radius:10px;background:#1B1D26;color:#C9CCD1;font:500 12.5px/16px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;
- box-shadow:0 0 0 1px #2A2D39,0 18px 40px -12px rgba(0,0,0,.85);transform:translateY(-6px);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}
+.msg{box-sizing:border-box;height:36px;gap:10px;padding:0 8px 0 10px;border-radius:10px;color:#C9CCD1;font:500 12.5px/16px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;transform:translateY(-6px);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}
 .msg.on{transform:none}
 .msg:before{width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:none;border:2px solid #3A3E4C;border-top-color:#C9CCD1;animation:hkspin .8s linear infinite}
 .msg.ok:before,.msg.bad:before{border:0;animation:none;background-repeat:no-repeat;background-position:center;background-size:16px}
@@ -250,8 +237,8 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .msg.bad:before{background-color:rgba(255,92,120,.14);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23FF5C78' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='m5.5 5.5 5 5m0-5-5 5'/%3E%3C/svg%3E")}
 .msg.ok{color:#EDEEF2}.msg.bad{color:#FFC7D0}
 .msg span{flex:1;min-width:0}
-.msg .rpt{height:24px;margin:0;padding:0 10px;border-radius:7px;background:#252834;box-shadow:inset 0 0 0 1px #2E3240;color:#EDEEF2;font:600 11.5px/24px HakiGeist,Geist,system-ui,sans-serif}
-.msg .rpt:hover{background:#2B2F3B}
+.msg .rpt{margin:0;box-shadow:inset 0 0 0 1px #2E3240}
+
 @keyframes hkspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.msg:before{animation:none}.msg{transition:opacity .16s ease}}.snp.on{color:#F5A524;box-shadow:inset 0 0 0 1px rgba(245,165,36,.5)}   /* 3.24.0: anti-sandwich slippage in use */
 .msg .rpt{flex:none;height:20px;margin-right:-4px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#EDEEF0;font:600 11px/20px HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
@@ -260,7 +247,7 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .p>.side:last-of-type,.sc{margin-bottom:0}
 /* edit mode: the 8 amounts as fields */
 .rail .cw{position:relative;min-width:0}
-input.c{width:100%;height:34px;min-width:0;padding:0 24px 0 6px;border-radius:8px;text-align:right;color:#EDEEF0;background:#0D0E10;font:500 13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;border:1px dashed #34363C;outline:0;cursor:text}
+input.c{width:100%;min-width:0;color:#EDEEF0;font:500 13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0;cursor:text}
 input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .rail .cw i{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-style:normal;font-size:10px;color:#5F646D;pointer-events:none}
 /* resize: drag the corner (bigger / smaller, saved) */
@@ -274,11 +261,11 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .rh[data-d=se]:after{content:"";position:absolute;right:4px;bottom:4px;width:6px;height:6px;border-right:1.5px solid #3A3D44;border-bottom:1.5px solid #3A3D44;border-bottom-right-radius:2px}
 .rh[data-d=se]:hover:after{border-color:#8A8F98}
 .p.min .rh,.p.min .xt{display:none}
-.xt{display:block;width:100%;height:14px;cursor:ns-resize;touch-action:none;position:relative;z-index:2}
-.xt:after{content:"";position:absolute;left:50%;top:5px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:#3A3D44;transition:background-color .12s}
+.xt{display:block;cursor:ns-resize;touch-action:none}
+.xt:after{content:"";position:absolute;left:50%;border-radius:2px;transition:background-color .12s}
 .xt:hover:after{background:#6B7079}
 .p.ext .rail{row-gap:6px}
-.p.bsc .shr,.p.bsc .sxl,.p.bsc .fu,.p.bsc .fu2{display:none}
+.p.bsc .shr,.p.bsc .fu,.p.bsc .fu2{display:none}
 /* wallets menu */
 .wm{position:fixed;width:288px;color:#EDEEF0;font-size:12px;line-height:16px;border-radius:12px;background:#141518;overflow:hidden;
  box-shadow:0 0 0 1px rgba(255,255,255,.08),inset 0 1px 0 rgba(255,255,255,.05),0 24px 56px -12px rgba(0,0,0,.9)}
@@ -301,7 +288,7 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .wr:hover{background:rgba(255,255,255,.025)}
 .wr input{position:absolute;opacity:0;width:1px;height:1px}
 .wr .ck{width:16px;height:16px;border-radius:5px;box-shadow:inset 0 0 0 1.5px #34363C;flex:none;display:grid;place-items:center}
-.wr input:checked+.ck{background:#EDEEF0;box-shadow:none}
+.wr input:checked+.ck{box-shadow:none}
 .wr input:checked+.ck:after{content:"";width:8px;height:4px;border:2px solid #111215;border-top:0;border-right:0;transform:translateY(-1px) rotate(-45deg)}
 .wr input:focus-visible+.ck{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 .wr .wl{display:flex;flex-direction:column;min-width:0}
@@ -370,7 +357,6 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .wal svg{color:#C9CDD8}
 .wal .cv{display:none}
 .tb .wb{display:none}
-.set .sxl{display:none}   /* 3.18.4: Exact removed */
 .smode{display:flex;align-items:center;gap:4px;height:22px;margin-left:6px;padding:0 7px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;color:#C9CDD8;font-size:11.5px;font-weight:600}
 .smode:hover{color:#fff;background:#252834}.smode .sol{width:13px;height:13px}.smode svg:last-child{color:#8A91A5}   /* 3.18.3 (owner: the minimise button stuck out): the balance is already next to Buy; the header shows the wallet count only */
 .tb>*{flex-shrink:0}.tb .sp{flex-shrink:1;min-width:0}
@@ -471,7 +457,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
  <section class="side ss">
   <div class="hd"><span class="lb">Sell</span><button class="smode" aria-label="Sell by % or by SOL amount">%</button><span class="rt num pos">No position</span><button class="init" disabled title="Sell what you put in, keep the rest">${I.bolt}Initials</button></div>
   <div class="rail rs off"></div>
-  <div class="set"><span title="Slippage">${I.slip}<b class="num sl">–</b></span><span title="Priority fee + bribe, SOL">${I.gas}<b class="num fe">–</b></span><span class="gu num fu2"></span><span class="fast" title="">${I.fast}<b>Fast</b></span><label class="aut sxl" title=""><span>Exact</span><input type="checkbox" class="sxe"><i class="sw"></i></label></div>
+  <div class="set"><span title="Slippage">${I.slip}<b class="num sl">–</b></span><span title="Priority fee + bribe, SOL">${I.gas}<b class="num fe">–</b></span><span class="gu num fu2"></span><span class="fast" title="">${I.fast}<b>Fast</b></span></div>
  </section>
  <section class="side sa shut">
   <div class="hd"><button class="atg" aria-expanded="false" title="For every coin in your trading wallets, against your average entry. Each rule once per position. Runs while Chrome is open.">Auto sell${I.chev}</button><span class="rt ast"></span><label class="aut" title="Safe trade: when the coin does 2x, sell what you put in (the rest rides for free)"><span>Safe 2x</span><input type="checkbox" class="asf"><i class="sw"></i></label></div>
@@ -549,10 +535,9 @@ button.c:active{transform:translateY(1px) scale(.985)}
   function paintSet0() {
     const p = pre(), fee = (+p.prio || 0) + (+p.tip || 0), sfee = (+(p.sprio ?? p.prio) || 0) + (+(p.stip ?? p.tip) || 0);
     const sl = $$('.sl'), fe = $$('.fe');
-    const ex = false, et = (C && C.exactTol) || 2, etb = (C && C.exactTolBuy) || 5, ssl = +(p.sslip ?? p.slip);   /* 3.12.21 Exact sell */
-    sl[0].textContent = (ex ? Math.min(+p.slip, etb) : +p.slip) + '%'; fe[0].textContent = s4(fee);
-    if (sl[1]) { sl[1].textContent = (ex ? Math.min(ssl, et) : ssl) + '%'; fe[1].textContent = s4(sfee); }
-    $$('.sxe').forEach(x => { x.checked = ex; x.parentElement.title = ex ? 'Exact is on: a buy fills within ' + etb + '% and a sell within ' + et + '% of the price at your click, or is not sent / not filled (then click again). Auto sell keeps the preset slippage.' : 'Exact is off: trades use the preset slippage (buy ' + p.slip + '%, sell ' + ssl + '%), so on a fast move they fill further from your click'; });
+    const ssl = +(p.sslip ?? p.slip);
+    sl[0].textContent = +p.slip + '%'; fe[0].textContent = s4(fee);
+    if (sl[1]) { sl[1].textContent = ssl + '%'; fe[1].textContent = s4(sfee); }
     $('.fu').textContent = last && last.usd ? '$' + (fee * last.usd).toFixed(2) : '';
     $('.fu2').textContent = last && last.usd ? '$' + (sfee * last.usd).toFixed(2) : '';
     $$('.fast').forEach((e, i) => { const tp = i ? +(p.stip ?? p.tip) : +p.tip, pr = i ? +(p.sprio ?? p.prio) : +p.prio;
@@ -1008,7 +993,6 @@ button.c:active{transform:translateY(1px) scale(.985)}
   WM.querySelector('.wmg').onclick = () => { wmClose(); send('openSettings', { add: true }); };
   document.addEventListener('pointerdown', e => { if (!WM.hidden && !e.composedPath().includes(host)) wmClose(); }, true);
   addEventListener('keydown', e => { if (e.key === 'Escape' && !WM.hidden) wmClose(); }, true);
-  $$('.sxe').forEach(x => { x.onchange = e => { C.sellExact = !!e.target.checked; chrome.storage.local.set({ sellExact: C.sellExact }); paintSet(); }; });
   $('.kbt').onclick = () => { C.hk = !C.hk; chrome.storage.local.set({ hk: C.hk }); build(); };
   $('.cfg').onclick = () => send('openSettings');
   /* 3.25.0 Snipe (an add-on of the owner's build): arm a curve coin, it is bought into its PumpSwap pool the moment migration creates it */
