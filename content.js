@@ -129,8 +129,8 @@ button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 
 .ib svg{width:15px;height:15px}
 
-.wal{display:flex;align-items:center;gap:5px;margin-right:2px;font-weight:600;flex:none}
-.wal svg{width:14px;height:14px}.wal .cv{width:12px;height:12px;color:#5F646D}
+.wal{display:flex;align-items:center;margin-right:2px;flex:none}
+.wal .cv{width:12px;height:12px;color:#5F646D}
 .wal:hover,.wal.on{color:#EDEEF0}
 .wn{display:none}.wn.on{display:inline}.wb[hidden]{display:none}
 /* PnL, the live line of this position, Bought / Sold / Holding + Share */
@@ -158,7 +158,7 @@ button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 
 .rt{margin-left:auto;display:flex;align-items:center;gap:4px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 
-.init{flex:none;margin-left:8px;font-size:12px}
+.init{flex:none;margin-left:8px}
 .init svg{display:none}
 .init:hover:not(:disabled){color:#FF8090}.init:disabled{color:#4A3036;cursor:default}
 .rail{display:grid;grid-template-columns:repeat(4,1fr)}
@@ -166,7 +166,7 @@ button.c{position:relative;height:34px;border-radius:8px;display:flex;flex-direc
 .rs button.c{height:38px}
 button.c .sol{display:none}
 button.c sub{display:none}
-button.c small{line-height:12px}
+
 .rb button.c:hover,.rb button.c:focus-visible{outline:0}
 .rs button.c:hover,.rs button.c:focus-visible{outline:0}
 
@@ -187,7 +187,7 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .cus input:focus{border-color:#4A4D54}
 .cus button{width:64px;height:32px;border-radius:8px;background:#37D399;color:#06140D;font-weight:600}
 /* switches */
-.aut{display:flex;align-items:center;gap:6px;color:#A9ADB4;font-weight:500;cursor:pointer;flex:none}
+.aut{display:flex;align-items:center;gap:6px;cursor:pointer;flex:none}
 .aut input{position:absolute;opacity:0;width:1px;height:1px}
 .sw{position:relative;width:26px;height:15px;border-radius:8px;background:#26282D;transition:background-color .15s;flex:none}
 .sw:after{content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#6B7079;transition:transform .15s,background-color .15s}
@@ -195,9 +195,9 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .aut input:focus-visible+.sw{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 /* Auto sell / Callout: one quiet row each, open below */
 
-.sa .hd,.sc .hd{margin:0}
-.atg,.ctg{display:flex;align-items:center;gap:4px;font-size:12px}
-.atg svg,.ctg svg{width:12px;height:12px;color:#4A4D54;transition:transform .15s}
+
+.atg,.ctg{display:flex;align-items:center;gap:4px}
+.atg svg,.ctg svg{width:12px;height:12px;transition:transform .15s}
 .sa.shut .atg svg,.sc.shut .ctg svg{transform:rotate(-90deg)}
 .ast,.cst{margin-left:6px!important;margin-right:auto;color:#5F646D;max-width:120px}.ast.on,.cst.ok{color:#6B7079}.cst.bad{color:#F0596B}
 .sa.shut .abody,.sc.shut .cbody{display:none}
@@ -338,73 +338,73 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .shf{width:818px;height:782px;border:0;background:transparent;color-scheme:dark;transform-origin:center}
 /* ===== 3.18.2 (owner: "a bit dark, lighter"): surfaces one step lighter. 3.18.1 (owner: "like Axiom, but not stolen"): Axiom's proven layout, HAKI's own look. HAKI's font (Medeo Sans), HAKI blue from the
    colours: neutral graphite, HAKI red once (the chosen preset; the logo's eye), keys with a coloured base line instead of pills, a wide PnL cell leading the stats bar ===== */
-.p{width:314px;background:#161821;border-radius:14px;box-shadow:0 0 0 1px #2A2D39,0 24px 48px -16px rgba(0,0,0,.85);font-family:HakiGeist,Geist,system-ui,sans-serif;font-size:13px}
+.p{width:314px;font-family:HakiGeist,Geist,system-ui,sans-serif;font-size:13px}
 /* 3.19.1 (owner: "the text is not sharp"): Geist for every UI text (Medeo is a display face: soft at 10-13 px); Medeo only for the Buy / Sell titles */
 .lb{font-family:HakiMedeo,HakiGeist,Geist,system-ui,sans-serif}
 .p button,.p input{font-family:inherit}
 .num,.n,.rt,.set b,.hero .v2{font-family:HakiGeist,Geist,system-ui,sans-serif}
-.tb{height:44px;padding:0 4px 0 8px;gap:1px;border-bottom:1px solid #2A2D39;background:#12141B}
-.tb .mk{width:22px;height:22px;margin-right:4px}
-.tabs{align-self:center;gap:0;margin:0 2px;padding:2px;border-radius:9px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39}
-.tabs button{height:24px;padding:0 7px;border-radius:7px;color:#8A91A5;font-size:12.5px;font-weight:600}
+
+
+.tabs{align-self:center;gap:0}
+
 .tabs button:hover{color:#fff}
-.tabs button.on{color:#fff;background:#E8132B;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+
 .tabs button.on:after{display:none}
 .ib{width:28px;height:28px;border-radius:8px;color:#8A91A5}
 .ib:hover{background:#1E2029;color:#fff}
 .ib.acc,.edt.on{color:#fff;background:#2B2E3A}
-.wal{height:28px;padding:0 10px 0 9px;margin:0 2px;border-radius:8px;background:#1E2029;box-shadow:inset 0 0 0 1px #343848;color:#fff;font-size:13px}
+.wal{color:#fff}
 .wal svg{color:#C9CDD8}
 .wal .cv{display:none}
 .tb .wb{display:none}
-.smode{display:flex;align-items:center;gap:4px;height:22px;margin-left:6px;padding:0 7px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;color:#C9CDD8;font-size:11.5px;font-weight:600}
+.smode{display:flex;align-items:center;gap:4px;margin-left:6px;padding:0 7px;color:#C9CDD8}
 .smode:hover{color:#fff;background:#252834}.smode .sol{width:13px;height:13px}.smode svg:last-child{color:#8A91A5}   /* 3.18.3 (owner: the minimise button stuck out): the balance is already next to Buy; the header shows the wallet count only */
 .tb>*{flex-shrink:0}.tb .sp{flex-shrink:1;min-width:0}
 .wal:hover,.wal.on{background:#252834;box-shadow:inset 0 0 0 1px #474B5C}
-.side{padding:12px 12px 0;border-top:0}
+.side{border-top:0}
 .ss{padding-top:4px}
-.hd{height:24px;margin-bottom:9px}
-.lb{font-size:14px;font-weight:700;color:#fff;letter-spacing:.01em}
+
+.lb{color:#fff}
 .ccy{display:flex;margin-left:6px;padding:0;background:none;box-shadow:none}
-.ccy span{display:flex;align-items:center;gap:5px;height:22px;padding:0 8px 0 4px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;font-size:11.5px;font-weight:600;color:#C9CDD8}
-.ccy .sol{width:14px;height:14px}
-.rt{color:#8A91A5}.rt b{color:#fff;font-size:14px;font-weight:600}
-.rt .sol{width:14px;height:14px}
-.rail{gap:6px}
-button.c,.rs button.c{height:var(--kh,40px);border-radius:10px;font-size:15px;font-weight:700;letter-spacing:0;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39,inset 0 -2px 0 var(--k,#2A2D39)}
-.rb button.c{color:#3DDC97;--k:#22A673}
-.rs button.c{color:#FF5C78;--k:#C2384F}
+.ccy span{display:flex;align-items:center;gap:5px}
+
+.rt{color:#8A91A5}.rt b{color:#fff}
+
+
+button.c,.rs button.c{letter-spacing:0}
+
+
 .rb button.c:hover,.rb button.c:focus-visible{background:#16342A;box-shadow:inset 0 0 0 1px #22A673,inset 0 -2px 0 #3DDC97;color:#5BF0B2}
 .rs button.c:hover,.rs button.c:focus-visible{background:#3A1A22;box-shadow:inset 0 0 0 1px #C2384F,inset 0 -2px 0 #FF5C78;color:#FF7A92}
-button.c small{display:block;font-size:10.5px;font-weight:500;color:#8A91A5;font-family:HakiGeist,Geist,system-ui,sans-serif}
-.p.hk .rail .c kbd{display:block;left:6px;top:4px;right:auto;bottom:auto;font:600 9px/10px HakiGeist,Geist,system-ui,sans-serif;color:#5A5F6E;letter-spacing:0}   /* 3.20.5: your hotkey letter */
+button.c small{display:block;font-family:HakiGeist,Geist,system-ui,sans-serif}
+.p.hk .rail .c kbd{display:block;right:auto;bottom:auto;letter-spacing:0}   /* 3.20.5: your hotkey letter */
 .p.hk .rail.off .c kbd{display:none}
 .rail.off button.c{color:#474B5C;background:#191B23;box-shadow:inset 0 0 0 1px #242733}
 .rail.off button.c small{color:#3A3E4C}
 .rb button.c.busy{background:#16342A}.rs button.c.busy{background:#3A1A22}
 input.c{height:40px;border-radius:10px;text-align:center;padding:0 18px 0 8px;background:#12141B;border:1px dashed #474B5C}
-.set{height:32px;gap:12px;color:#8A91A5;font-size:12px}
+.set{color:#8A91A5}
 .set>span,.set .fast{display:flex;align-items:center;gap:5px}
-.set svg{width:13px;height:13px;color:#5A6178;flex:none}
-.set b{color:#D5D9E4;font-weight:500}
+.set svg{color:#5A6178;flex:none}
+.set b{font-weight:500}
 .set .fast svg{color:#3DDC97}.set .fast.no svg{color:#5A6178}
 .adv{color:#C9CDD8}.adv:hover{color:#fff}
-.init{color:#FF5C78;font-weight:700}
-.sa,.sc{margin:4px 12px 0;padding:0;border-top:1px solid #2A2D39}
+
+.sa,.sc{margin:4px 12px 0;border-top:1px solid #2A2D39}
 .sc{margin-top:0}
-.sa .hd,.sc .hd{height:38px}
-.atg,.ctg{color:#C9CDD8;font-weight:600}
+
+
 .aut input:checked+.sw{background:#2FBF86}
-.hero,.p.nopos .hero{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;margin-top:8px;padding:0;border-top:1px solid #2A2D39;background:#12141B;align-items:stretch;column-gap:0}
+.hero,.p.nopos .hero{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;padding:0;align-items:stretch;column-gap:0}
 .p.min .hero{display:none}
 .hero .spk{display:none}
-.hero .fc{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;height:50px;min-width:0;padding:0 10px}
-.hero .fc+.fc{box-shadow:inset 1px 0 0 #2A2D39}
-.hero .v2{display:flex;align-items:center;gap:4px;font-size:12.5px;line-height:16px;font-weight:600;color:#fff;white-space:nowrap;max-width:100%;overflow:hidden}
-.hero .cp .v2{font-size:17px;line-height:20px}
+.hero .fc{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:0}
+
+.hero .v2{display:flex;align-items:center;gap:4px;line-height:16px;color:#fff;white-space:nowrap;max-width:100%;overflow:hidden}
+.hero .cp .v2{line-height:20px}
 .hero .hv .un,.hero .v2 .un{display:inline-flex!important}
 .hero .un .sol{width:14px;height:14px}
-.hero .k2{font-size:11px;line-height:13px;color:#7A8094;font-weight:500;letter-spacing:0}
+.hero .k2{font-size:11px;line-height:13px;font-weight:500;letter-spacing:0}
 .hero .pn{font-size:inherit;line-height:inherit;letter-spacing:-.01em;font-weight:600;color:#fff}
 .hero .k2 .pp{font-size:11px;font-weight:600;margin-left:3px;color:#8A91A5}
 .hero .cp{cursor:pointer}
@@ -433,6 +433,64 @@ button.c:active{transform:translateY(1px) scale(.985)}
 .hero .pn,.hero .v2{transition:color .25s}
 @media (prefers-reduced-motion:reduce){.wm:not([hidden]),.pw:not([hidden]),.abody,.cbody{animation:none}}
 @media (prefers-reduced-motion:reduce){button.c{transition:none}button.c:active{transform:none}button.c.busy:after{animation:none;left:0;width:100%;opacity:.5}}
+/* 3.27.0 glass look (owner reference): near-black panel, outlined header groups, glass keys with a coloured lower edge, lighter weights */
+.p{border-radius:14px;background:linear-gradient(180deg,#15181D 0,#0C0E13 34%,#090B0F 100%);box-shadow:0 0 0 1px #2B2D33,0 24px 60px -18px rgba(0,0,0,.9)}
+.tb{height:38px;padding:0 8px 0 11px;gap:4px;background:transparent;border-bottom:1px solid rgba(255,255,255,.055)}
+.tb .mk{width:20px;height:20px;margin-right:6px}
+.tb .sp{display:none}
+.tb .ib{width:26px;height:26px}
+.tb .edt{margin-left:auto;margin-right:6px}
+.tb .mn{width:18px}
+.tb .kbt{width:33px;height:21px;border-radius:7px;background:rgba(255,255,255,.015);box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);color:#C3C7D2}
+.tabs{padding:2px;margin:0 0 0 3px;border-radius:8px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.tabs button{height:19px;padding:0 7px;border-radius:6px;font-size:11.5px;font-weight:500;color:#A3A7B3}
+.tabs button.on{background:#D42443;color:#fff;box-shadow:none}
+.tb .edt,.tb .cfg{color:#B5BAC6}
+.wal{height:21px;padding:0 7px;margin:0;gap:5px;border-radius:7px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);font-weight:500;font-size:11px}
+.wal svg{width:13px;height:13px}
+.side{padding:6px 12px 0}
+.hd{height:22px;margin-bottom:5px}
+.lb{font-size:13px;font-weight:600;letter-spacing:0}
+.ccy span{height:19px;padding:0 8px 0 4px;border-radius:10px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-size:10.5px;font-weight:500;color:#C3C7D2}
+.ccy .sol{width:12px;height:12px}
+.smode{height:19px;border-radius:6px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-size:10.5px;font-weight:500}
+.rt{font-size:10.5px}
+.rt b{font-size:11.5px;font-weight:500}
+.rt b.bal{font-size:12px;font-weight:600}
+.rt .sol{width:12px;height:12px}
+.init{font-size:10.5px;font-weight:500;color:#F0506A}
+.rail{gap:8px;margin-bottom:2px}
+button.c,.rs button.c{height:33px;border-radius:8px;font-size:13px;font-weight:500;background:linear-gradient(180deg,rgba(255,255,255,.05) 0,rgba(255,255,255,.03) 60%,color-mix(in srgb,var(--k) 8%,transparent) 100%)}
+.rb button.c{color:#3DDC97;--k:#2FD28A}
+.rs button.c{color:#F0506A;--k:#E23A55}
+.rs button.c span{line-height:14px}
+button.c small{font-size:10px;line-height:11px;color:#A5AEBF;font-weight:400}
+.rb button.c:hover{background:color-mix(in srgb,#2FD28A 12%,transparent);box-shadow:inset 0 0 0 1px rgba(47,210,138,.45),inset 0 -1.5px 0 #2FD28A,0 6px 14px -6px #2FD28A;color:#5BF0B2}
+.rs button.c:hover{background:color-mix(in srgb,#E23A55 12%,transparent);box-shadow:inset 0 0 0 1px rgba(226,58,85,.45),inset 0 -1.5px 0 #E23A55,0 6px 14px -6px #E23A55;color:#FF7A92}
+.p.hk .rail .c kbd{left:7px;top:5px;font:500 8px/9px HakiGeist,Geist,system-ui,sans-serif;color:#6E7180}
+.set{height:24px;font-size:10.5px;gap:12px}
+
+.set b{color:#DADDE5}
+.sa{margin-top:2px;border-top:1px solid rgba(255,255,255,.06);padding-top:0}
+.sc{border-top:1px solid rgba(255,255,255,.06);padding-top:0}
+.sa .hd,.sc .hd{height:21px;margin:0}
+.atg,.ctg{font-size:11px;font-weight:500;color:#E3E5EB}
+.atg svg,.ctg svg{color:#7A7F8C}
+.aut{font-size:10.5px;font-weight:400;color:#AEB2BC}
+.hero,.p.nopos .hero{margin-top:3px;background:#0D0F14;border-top:1px solid rgba(255,255,255,.07);border-radius:0 0 14px 14px}
+.hero .fc{height:44px;padding:0 12px}
+.hero .fc+.fc{box-shadow:inset 1px 0 0 rgba(255,255,255,.07)}
+.hero .v2{font-size:11px;font-weight:500}
+.hero .cp .v2{font-size:14.5px;font-weight:600}
+.hero .k2,.hero .k2 .pp{font-size:10px}
+.hero .k2{color:#8A8F9C}
+.sa,.sc{padding:0}
+.set b.asl{color:#3DDC97}
+.set svg{width:13px;height:13px}
+.hero .fc:not(.cp){align-items:center}
+.xt,.rh{opacity:0;transition:opacity .15s}
+.p:hover .xt,.p:hover .rh{opacity:1}
+button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.085),inset 0 -1.5px 0 color-mix(in srgb,var(--k) 45%,transparent),0 4px 8px -7px var(--k)}
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
 <linearGradient id="hkSpf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37D399" stop-opacity=".18"/><stop offset="1" stop-color="#37D399" stop-opacity="0"/></linearGradient>
