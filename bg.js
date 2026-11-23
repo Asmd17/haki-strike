@@ -1171,7 +1171,7 @@ function wsOpen(c) {
   ws.onmessage = e => {
     LIVE.at = Date.now(); let j; try { j = JSON.parse(e.data); } catch (_) { return; }
     if (j.id != null && LIVE.wait.has(j.id)) { LIVE.wait.get(j.id)(j); LIVE.wait.delete(j.id); return; }
-    if (j.method === 'accountNotification') { const f = LIVE.subs.get(j.params.subscription); if (f) f(j.params.result.value); }
+    if (j.method === 'accountNotification') { const f = LIVE.subs.get(j.params.subscription); if (f) f(j.params.result.value, ((j.params.result || {}).context || {}).slot || 0); }   /* 3.29.4: + the slot it is from */
     if (j.method === 'slotNotification') { SLOT.v = (j.params.result || {}).slot || SLOT.v; SLOT.t = Date.now(); return; }
     if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { landSeen(s, ((j.params.result || {}).context || {}).slot, ((j.params.result || {}).value || {}).err); LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
       for (const p of LIVE.ports) try { p.postMessage({ sigDone: s }); } catch (_) {} } }   /* 3.20.5: the panel hears it at once (was: its next 120 ms ask) */
@@ -1189,8 +1189,11 @@ function wsUnsub(c, id) { if (!LIVE.subs.delete(id) || !LIVE.ws || LIVE.ws.ready
 function liveLedger() { for (const p of LIVE.ports) p.ledger(); }
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'live' || !port.sender || port.sender.id !== chrome.runtime.id) return;
-  const S = { a: null, mint: null, isMint: false, ids: [], st: null, L: [], usd: null, poll: 0, rate: 0, chk: 0, lastN: 0, tm: 0, last: 0, gen: 0, c: null, pubs: [], raws: new Map(), atas: [] };
+  const S = { a: null, mint: null, isMint: false, ids: [], st: null, L: [], usd: null, poll: 0, rate: 0, chk: 0, lastN: 0, tm: 0, last: 0, gen: 0, c: null, pubs: [], raws: new Map(), atas: [], rsl: new Map(), ar: 0 };
   const total = () => { let t = 0n; for (const v of S.raws.values()) t += v; return t; };   /* tokens of all trading wallets */
+  /* 3.29.4 (owner 1123: "after a buy the sell panel sometimes does not see it"): a token balance from an older slot (a lagging node behind
+     the load balancer) never overwrites a newer one; that read showed 0 right after the buy and the Sell row stayed off */
+  const setRaw = (pub, raw, sl) => { const k = S.rsl.get(pub) || 0; if (sl && sl < k) return false; if (sl) S.rsl.set(pub, sl); S.raws.set(pub, raw); return true; };
   const post = p => { try { port.postMessage(p); } catch (_) {} };
   const paint = () => {   /* at most every 120 ms: a busy coin changes every block */
     if (S.tm) return; const d = Math.max(0, 120 - (Date.now() - S.last));
@@ -1202,7 +1205,15 @@ chrome.runtime.onConnect.addListener(port => {
       post({ sym: S.sym, mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length, aslip: ac });
     }, d);
   };
-  const stop = () => { for (const id of S.ids) wsUnsub(S.c, id); S.ids = []; clearInterval(S.poll); clearInterval(S.rate); clearInterval(S.chk); S.poll = S.rate = S.chk = 0; if (S.st) S.st.live = false; S.st = null; };
+  const stop = () => { for (const id of S.ids) wsUnsub(S.c, id); S.ids = []; clearInterval(S.poll); clearInterval(S.rate); clearInterval(S.chk); clearInterval(S.ar); S.poll = S.rate = S.chk = S.ar = 0; S.rsl.clear(); if (S.st) S.st.live = false; S.st = null; };
+  const readAtas = async () => {   /* 3.29.4: the token accounts read directly, kept only when not older than what the feed gave */
+    const st = S.st; if (!st || !S.atas.length) return;
+    const r = await SOLX.rpc('getMultipleAccounts', [S.atas.map(q => q.ata), { encoding: 'base64', commitment: 'processed' }], rpcUrl(S.c || {})); if (S.st !== st) return;
+    const sl = ((r || {}).context || {}).slot || 0, V = (r || {}).value || []; let ch = false;
+    S.atas.forEach((q, i) => { const v = V[i], d = v && SOLX.unb64(v.data[0]), raw = d && d.length >= 72 ? SOLX.u64(d, 64) : 0n; if (raw === S.raws.get(q.pub)) return;
+      if (setRaw(q.pub, raw, sl)) { ch = true; if (q.pub === S.pubs[0]) { st.raw = raw; st.t = Date.now(); } } });
+    if (ch) paint();
+  };
   async function start(gen) {
     const c = S.c = await cfg(), SW = await selected(), b = SW[0]; if (!b || !S.a) return;
     const pubs = SW.map(w => w.pub); S.pubs = pubs;
@@ -1234,11 +1245,12 @@ chrome.runtime.onConnect.addListener(port => {
             if (p.pool) S.ids.push(await wsSub(c, p.pool, v => { const d = v && SOLX.unb64(v.data[0]), P = PP(); if (!P || !d || d.length < 245) return; Object.assign(P, SOLX.poolFlags(d)); P.Q = P.Qv + P.virt; paint(); }));
           }
           if (p.quote && p.quote !== SOLX.WSOL) S.rate = setInterval(() => { SOLX.quoteRate(p.quote).then(paint).catch(() => {}); }, 15000);   /* the quote token's SOL price */
-          for (const q of S.atas) S.ids.push(await wsSub(c, q.ata, v => {   /* each wallet's token account */
+          for (const q of S.atas) S.ids.push(await wsSub(c, q.ata, (v, sl) => {   /* each wallet's token account */
             if (!S.st) return; const d = v && SOLX.unb64(v.data[0]), raw = d && d.length >= 72 ? SOLX.u64(d, 64) : 0n;
-            S.raws.set(q.pub, raw); if (q.pub === b.pub) { S.st.raw = raw; S.st.t = Date.now(); } paint(); syncSoon(q); }));
+            if (!setRaw(q.pub, raw, sl)) return; if (q.pub === b.pub) { S.st.raw = raw; S.st.t = Date.now(); } paint(); syncSoon(q); }));
           if (gen !== S.gen) { stop(); return; }
           st.live = true; S.lastN = Date.now();
+          S.ar = setInterval(() => { if (gen === S.gen) readAtas().catch(() => {}); }, 3000);   /* 3.29.4: a missed token-account update can not leave the panel blind */
           /* watchdog (3.8.3): the feed quiet for 15 s while a direct read shows the coin moved = it stopped delivering: a new socket */
           S.chk = setInterval(async () => {
             if (gen !== S.gen || !S.st || Date.now() - S.lastN < 15000) return;
@@ -1293,13 +1305,10 @@ chrome.runtime.onConnect.addListener(port => {
   }
   port.say = post;
   port.fresh = async () => {   /* re-read the token account (and the wallet) right after a trade lands; again 1 s later for a lagging node */
-    for (const wait of [0, 1000, 2500]) {
+    for (const wait of [0, 600, 900, 1500, 3000]) {   /* 3.29.4: more reads, each kept only if not older than the feed's */
       if (wait) await new Promise(r => setTimeout(r, wait));
-      const st = S.st; if (!st || !S.atas.length) { if (!S.st && S.a) port.resub(); return; }
-      try {
-        const T = await SOLX.accs(S.atas.map(q => q.ata), rpcUrl(S.c || {})); if (S.st !== st) return;
-        S.atas.forEach((q, i) => { const ta = T[i], raw = ta && ta.data.length >= 72 ? SOLX.u64(ta.data, 64) : 0n; S.raws.set(q.pub, raw); if (q.pub === S.pubs[0]) st.raw = raw; }); paint();
-      } catch (_) {}
+      if (!S.st || !S.atas.length) { if (!S.st && S.a) port.resub(); return; }
+      try { await readAtas(); } catch (_) {}
     }
   };
   port.resub = () => { if (!S.a) return; stop(); const g = ++S.gen; start(g).catch(e => { if (g === S.gen) post({ err: String((e && e.message) || e) }); }); };

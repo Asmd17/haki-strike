@@ -177,7 +177,7 @@ button.c sub{display:none}
 
 .c kbd{display:none;position:absolute;right:5px;bottom:3px;font:500 8.5px/10px HakiInter,HakiGeist,Geist,system-ui,sans-serif;color:#3F4249}
 .p.hk .c kbd{display:block}
-.rail.off button.c{pointer-events:none}
+.rail.off button.c{cursor:pointer}
 button.c.busy{overflow:hidden}
 
 button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;height:2px;border-radius:1px;background:currentColor;animation:hkrun .9s linear infinite}
@@ -661,7 +661,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     sT = setTimeout(() => { S.classList.remove('on'); }, k === 'ok' ? 3500 : k === 'bad' ? 8000 : 20000);
   };
   let nBuy = 0, selling = false;   /* buys run side by side (every click is a buy); a sell blocks the sell buttons until it is back */
-  const lock = () => { busy = selling || nBuy > 0; for (const b of $$('.rs button.c, .init')) b.disabled = selling; };
+  const lock = () => { busy = selling || nBuy > 0; for (const b of $$('.init')) b.disabled = selling; };   /* 3.29.4: the sell keys stay live (a click during a sell is queued) */
+  let QS = null;   /* 3.29.4 (owner 1123: "sometimes 10 % or 5 % does not react"): the sell clicked while another one is being sent */
   const pre = () => (C && C.presets && C.presets[C.preset || 0]) || { slip: 20, prio: 0.0001, tip: 0.0003 };
   function aslipPaint() {   /* 3.24.0 anti-sandwich: the slippage the next buy / sell will use, from this coin's real moves (your preset is the most) */
     const sl = $$('.sl'), A2 = last && last.aslip, on = C && C.autoSlip !== false && !PAPER;
@@ -820,6 +821,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     const r = await watch1(sig, x => status(label + ': ' + x.why + ', sent again' + (x.why.includes('slippage') ? ' with ' + x.slip + '%' : '') + '…'));
     if (r.ok) {
       const msg = label + ' landed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s' + (rr && rr.ms != null ? ' (sent in ' + rr.ms + ' ms' + (rr.pre ? ', ready before the click' : rr.miss ? ', not ready: ' + rr.miss : '') + lapTxt(rr) + ')' : ''); status(msg, 'ok'); refreshBal(); window.hkSound(/^Sell/.test(label) ? 'sell' : 'buy');
+      if (/^Buy/.test(label)) { const a0 = A; setTimeout(() => { if (A === a0 && !PAPER && !(last && +last.raw > 0)) watchNow(); }, 3000); }   /* 3.29.4 */
       if (rr) fillNote(rr, r.sig).then(n => { if (n && S.title === msg) status(msg + n, 'ok'); }).catch(() => {});
     }
     else { status(r.slow ? label + ': not landed in 45 s. Check the wallet on Solscan.' : label + ' failed: ' + r.why, 'bad'); window.hkSound('fail'); }
@@ -865,7 +867,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   }
   let pathAt = 0;   /* 3.26.1: when the page's address last changed */
   async function trade(a, side, v, btn) {
-    if (!a || (side === 'sell' && selling)) return;
+    if (!a) { status('The coin of this page is not read yet: click again in a second', 'bad'); return; }
+    if (side === 'sell' && selling) { QS = { a, v, btn }; status('Sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%: goes right after the sell being sent…'); return; }
     /* 3.26.1 security (audit 1122): a page can swap the coin in its address right under your click. A trade within 0.6 s of the address
        changing (or for another coin than the one on the page now) is not sent: look, then click again */
     if (Date.now() - pathAt < 600 || a !== pageAddr()) { status('The page just switched coins: check the coin and click again', 'bad'); return; }
@@ -876,9 +879,11 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (btn) { if (!btn._n) btn.classList.add('busy'); btn._n = (btn._n || 0) + 1; }   /* 3.11.2 (owner): the amount stays on the key while it trades */
     status(label + (side === 'buy' && nBuy > 1 ? '… (' + nBuy + ' buys going)' : '…'));
     const mc = last && Date.now() - lastT < 5000 && +last.mc_sol > 0 ? +last.mc_sol : 0;   /* 3.12.22 Exact: the MC you saw at the click */
-    const r = await send('trade', side === 'buy' ? { side, a, sol: v, key: uid(), isMint: isMintPage(), mc } : { side, a, pct: v, key: uid(), isMint: isMintPage(), mc });
+    const r = await Promise.race([send('trade', side === 'buy' ? { side, a, sol: v, key: uid(), isMint: isMintPage(), mc } : { side, a, pct: v, key: uid(), isMint: isMintPage(), mc }),
+      new Promise(z => setTimeout(() => z({ err: label + ': no answer from HAKI in 30 s. Check the wallet before you click again' }), 30000))]);   /* 3.29.4: a stuck answer can not lock the keys */
     if (btn && !--btn._n) btn.classList.remove('busy');
     if (side === 'buy') nBuy--; else selling = false; lock(); if (last) paintPos(last);
+    if (side === 'sell' && QS) { const q = QS; QS = null; setTimeout(() => trade(q.a, 'sell', q.v, q.btn), 0); }
     if (r.err) { status(r.err, 'bad'); return; }
     if (r.sent === false) { status(r.sim_err ? 'Test mode: ' + simWhy(r.sim_err) : 'Test mode: simulated OK, nothing sent', r.sim_err ? 'bad' : 'ok'); return; }
     await sent(r, label, t0);
@@ -1169,7 +1174,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   const hotkey = h => {   /* h = { s: 'b' | 's', i: key number } */
     if (!C || !C.hk || !A || P.hidden || !h) return false;
     if (h.s === 'b' && BROW()[h.i] != null) { trade(A, 'buy', +BROW()[h.i], $$('.rb .c')[h.i]); return true; }   /* BNB mode buys its BNB amounts */
-    if (h.s === 's' && SROW()[h.i] != null) { if (last && +last.raw > 0) sellKey(SROW()[h.i], $$('.rs .c')[h.i]); else status('Nothing to sell yet', 'bad'); return true; }
+    if (h.s === 's' && SROW()[h.i] != null) { sellKey(SROW()[h.i], $$('.rs .c')[h.i]); return true; }   /* 3.29.4: the worker checks the chain itself */
     return false;
   };
   let space = false;
