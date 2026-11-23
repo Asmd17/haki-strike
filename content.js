@@ -1147,15 +1147,15 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   let SNP = new Map();
   const snpPaint = () => { const b = $('.snp'); if (!b) return; const show = !!(C && C.snipe) && !!A && !isBsc(A) && !PAPER; b.hidden = !show; if (!show) return;
     const m = (last && last.mint) || A, x = SNP.get(m); b.classList.toggle('on', !!x); b.textContent = x ? 'Armed ' + x.sol : 'Snipe';
-    b.title = x ? 'Armed: ' + x.sol + ' SOL is bought into the PumpSwap pool the moment this coin migrates. Click to disarm' : 'Snipe the migration: buy the moment the PumpSwap pool appears (amount: the Custom field, else your first buy key)'; };
+    b.title = x ? 'Armed: ' + x.sol + ' SOL is bought into the PumpSwap pool the moment this coin migrates. Click to disarm' : 'Snipe the migration: buy the moment the PumpSwap pool appears (amount: Settings -> Snipe, or the Custom field if you typed one)'; };
   const snpSet = L => { SNP = new Map((L || []).map(x => [x.mint, x])); snpPaint(); };
   $('.snp').onclick = async e => {
     if (!e.isTrusted || !A) return; const m = (last && last.mint) || A;
     if (SNP.has(m)) { const r = await send('snipe', { do: 'off', a: A }); if (r && !r.err) snpSet(r.armed); return; }
-    const own = parseFloat(String(($('.amt') || {}).value || '').replace(',', '.')), sol = own > 0 ? own : +BROW()[0];
-    status('Arming snipe ' + sol + ' SOL…'); const r = await send('snipe', { do: 'arm', a: A, sol });
+    const own = parseFloat(String(($('.amt') || {}).value || '').replace(',', '.')), sol = own > 0 ? own : 0;   /* 3.29.3: 0 = the amount set in Settings -> Snipe */
+    status('Arming snipe…'); const r = await send('snipe', { do: 'arm', a: A, sol });
     if (!r || r.err) { status('Snipe: ' + ((r && r.err) || 'failed'), 'bad'); return; }
-    snpSet(r.armed); status('Snipe armed: ' + sol + ' SOL the moment this coin migrates (keep Chrome open)', 'ok');
+    snpSet(r.armed); const x = (r.armed || []).find(y => y.mint === r.mint) || {}; status('Snipe armed: ' + (x.sol || sol) + ' SOL the moment this coin migrates (keep Chrome open)', 'ok');
   };
   $('.ppb').onclick = async e => { if (!e.isTrusted) return; const r = await send('paperSet', { on: !PAPER }); PAPER = !!(r && r.on); paperUi(); status(PAPER ? 'Paper trading on: play money at live prices, nothing is sent' : 'Paper trading off: trades are real again', PAPER ? 'ok' : ''); };
   $('.ppr').onchange = async e => { const r = await send('paperSet', { on: e.target.checked }); PAPER = !!(r && r.on); paperUi(); if (PAPER) status('Paper trading on: play money at live prices, nothing is sent', 'ok'); };
