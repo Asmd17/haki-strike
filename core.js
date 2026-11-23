@@ -223,7 +223,7 @@ const SOLX = (() => {
     /* 3.29.8 (owner 1123 lost ~0.89 SOL: jackat -> JACKET -> SOL in one transaction, the 40-account second leg went through a tiny Meteora pool,
        0.038 SOL where the free route gave 0.926): the one-transaction route more than 5 % under the free one -> two transactions */
     const full = await fullP;
-    if (ok && full && BigInt(ok.q2.outAmount) * 100n < BigInt(full.outAmount) * 95n) { const e = new Error('TWOTX'); e.two = true; e.q1 = ok.q1; throw e; }
+    if (ok && full && BigInt(ok.q2.outAmount) * 100n < BigInt(full.outAmount) * 95n) { const e = new Error('TWOTX'); e.two = true; e.q1 = null; throw e;   /* 3.29.9: step 1 quoted again with no account limit (the squeezed one gave ~52 % on a buy) */ }
     if (ok) {
       const { q1, q2, b } = ok;
       /* what trade() reads: in = SOL / tokens actually turned into the coin / SOL, out = what the second leg gives, impacts added up */
@@ -232,7 +232,7 @@ const SOLX = (() => {
       return { q, msg: b.msg, tip: b.tip, t: Date.now() };
     }
     const hard = built.find(r => r.e && !SIZE.test(String(r.e.message))), last = (hard || built[0] || {}).e;
-    if (!hard && last && !soft) { const e = new Error('TWOTX'); e.two = true; e.q1 = pairs[0][0]; throw e; }   /* trade() goes in two steps, with this first leg */
+    if (!hard && last && !soft) { const e = new Error('TWOTX'); e.two = true; e.q1 = null; throw e; }   /* trade() goes in two steps, with this first leg */
     throw last || new Error('no route');
   }
   async function jupMake(side, m, x, o, pub, url, soft, qm) {   /* x = lamports in (buy) or tokens in (sell) -> {q, msg | raw, tip, t}; qm: the coin's quote token */
