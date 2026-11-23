@@ -300,23 +300,32 @@ const SOLX = (() => {
     try { const r = await p; if (PREP.get(k) === hold) PREP.set(k, r); PMISS.delete(mk); return r; } catch (e) { if (PREP.get(k) === hold) PREP.delete(k); PMISS.set(mk, 'pre-build failed: ' + String(e.message || e).slice(0, 50)); throw e; }
   }
   /* 3.29.14 (owner 1123: "sometimes my sells do not go through"; chain, 3 days: 7 sells were sent while the previous sell of the same coin
-     was still landing, sized from the balance before it, and failed with nothing left to sell - 0x1788 / pump 6023). A sell now waits for
-     the sells of that coin still on the wire (up to ~6 s), then reads the balance afresh and is sized from what is really left. */
-  const FLY = new Map();   /* wallet|mint -> [{sig, t}] sells sent and not yet seen landed */
-  async function settleSells(pub, m, url) {
-    const k = pub + '|' + m, L = (FLY.get(k) || []).filter(e => Date.now() - e.t < 20000); FLY.delete(k); if (!L.length) return null;
-    for (let i = 0; i < 20; i++) {
-      const v = (((await rpc('getSignatureStatuses', [L.map(e => e.sig)], url).catch(() => null)) || {}).value) || [];
-      if (L.every((e, j) => v[j])) break;   /* every one landed or failed */
-      await sleep(300);
+     was still landing, sized from the balance before it, and failed with nothing left to sell - 0x1788 / pump 6023).
+     3.29.15 (owner: "it took 3-4 s", "I can not press"): no waiting any more. The sells of this coin sent in the last 10 s and not landed yet
+     are taken off the balance (statuses read first, then the balance: a sell landing in between is counted twice = this sell is a bit
+     smaller, never too big). Only when they already cover everything you hold, it waits for them (at most ~2 s). */
+  const FLY = new Map();   /* wallet|mint -> [{sig, t, amt}] sells sent and not yet seen landed */
+  async function sellRoom(pub, m, url) {
+    const k = pub + '|' + m; let L = (FLY.get(k) || []).filter(e => Date.now() - e.t < 10000); if (!L.length) { FLY.delete(k); return null; }
+    for (let i = 0; ; i++) {
+      const v = L.length ? ((((await rpc('getSignatureStatuses', [L.map(e => e.sig)], url).catch(() => null)) || {}).value) || []) : [];
+      const pend = L.filter((e, j) => !v[j]);   /* landed or failed ones drop out: the balance below already shows them */
+      const raw = (await tokBal(pub, m, url)).raw, left = pend.reduce((a, e) => a - e.amt, raw);
+      if (pend.length) FLY.set(k, pend); else FLY.delete(k);
+      if (left > 0n || !pend.length || i >= 8) return { left: left > 0n ? left : 0n, pend: pend.length };
+      L = pend; await sleep(250);
     }
-    const raw = (await tokBal(pub, m, url)).raw, s = ST.get(m + '|' + pub); if (s) s.raw = raw;
-    return raw;
   }
   async function trade(o, seed, pub, url) {
-    if (o.side === 'sell' && o.live !== false && [...FLY.keys()].some(k => k.startsWith(pub + '|'))) { const m = await mintOf(o.a, url, o.isMint); if (FLY.has(pub + '|' + m)) await settleSells(pub, m, url).catch(() => null); }   /* no sell on the wire: no extra step */
-    const r = await trade0(o, seed, pub, url);
-    if (r && r.sent && r.sig && o.side === 'sell' && r.mint) { const k = pub + '|' + r.mint, L = FLY.get(k) || []; L.push({ sig: r.sig, t: Date.now() }); FLY.set(k, L.slice(-5)); }
+    let oo = o;
+    if (o.side === 'sell' && o.live !== false && [...FLY.keys()].some(k => k.startsWith(pub + '|'))) {   /* no sell on the wire: no extra step */
+      const m = await mintOf(o.a, url, o.isMint);
+      if (FLY.has(pub + '|' + m)) { const r = await sellRoom(pub, m, url).catch(() => null);
+        if (r && r.left <= 0n && r.pend) throw new Error('everything you hold is already being sold (the sell sent just before is landing)');
+        if (r) oo = Object.assign({}, o, { _avail: r.left }); }
+    }
+    const r = await trade0(oo, seed, pub, url);
+    if (r && r.sent && r.sig && o.side === 'sell' && r.mint && r.amt) { const k = pub + '|' + r.mint, L = FLY.get(k) || []; L.push({ sig: r.sig, t: Date.now(), amt: BigInt(r.amt) }); FLY.set(k, L.slice(-6)); }
     return r;
   }
   async function trade0(o, seed, pub, url) {
@@ -325,6 +334,7 @@ const SOLX = (() => {
     const m = await mintOf(o.a, url, o.isMint);
     const hov = [...PREP.keys()].some(q => q.startsWith(pub + '|' + m + '|' + (o.side === 'sell' ? 'sell' : 'buy') + '|'));   /* 3.12.2: the button was hovered */
     let st = null; try { st = await pumpState(m, pub, url, hov ? (o.side === 'buy' ? 10000 : 3000) : (o.side === 'buy' ? 2500 : 0)); } catch (_) {}
+    if (o._avail != null && st) st = Object.assign({}, st, { raw: o._avail, flying: true });   /* 3.29.15: what is left after the sells still landing (the token account is not closed: they may land after this one) */
     lap.st = Date.now() - t0;
     if (o.native !== false && st && st.native) return nativeTrade(o, st, seed, pub, url, t0, tip);
     if (o.native !== false && o.pool !== false && poolOk(st)) { try { return await poolTrade(o, st, seed, pub, url, t0, tip); } catch (e) { if (!/^POOLSKIP/.test(String(e.message))) throw e; } }
@@ -332,7 +342,7 @@ const SOLX = (() => {
     if (o.side === 'buy') { sol = +o.sol; if (!(sol > 0 && sol <= (+o.maxSol || 5))) throw new Error('amount must be above 0 and at most ' + (+o.maxSol || 5) + ' SOL'); x = BigInt(Math.round(sol * 1e9)); }
     else if (o.side === 'sell') {
       const pct = +o.pct; if (!(pct > 0 && pct <= 100)) throw new Error('sell percent must be 1-100');
-      x = sellAmount(st ? st.raw : (await tokBal(pub, m, url)).raw, pct); if (x <= 0n) throw new Error('you hold none of this token');
+      x = sellAmount(st ? st.raw : o._avail != null ? o._avail : (await tokBal(pub, m, url)).raw, pct); if (x <= 0n) throw new Error('you hold none of this token');
     } else throw new Error('side must be buy or sell');
     lap.st = Date.now() - t0;
     const oo = Object.assign({}, o, { slip, tip, prio, _lap: lap, _spot: o.side === 'sell' ? spotSol(st, x) : null }), k = pkey(m, o.side, x, oo, pub), P = PREP.get(k);
@@ -363,7 +373,7 @@ const SOLX = (() => {
     if (b.msg) { const sg = await sign(seed, b.msg); tx64 = b64(cat(Uint8Array.of(1), sg, b.msg)); sig = b58e(sg); }
     else { const [signed, s2] = await signTx(b.raw, seed, pub); tx64 = b64(signed); sig = s2; }
     lap.sign = Date.now() - t0 - lap.st - lap.route; lap.wait = JW.ms - jw0; lap.legs = (b.q && b.q.legs) || 1; lap.raw = !b.msg;
-    const res = { ok: true, side: o.side, mint: m, sig, impact: +imp.toFixed(2), tip: b.tip / 1e9, prio, pre: !!ready, miss: ready ? '' : miss, lap, fast: !!b.msg, route: (b.q.routePlan || []).map(r => (r.swapInfo || {}).label), tx64 };
+    const res = { ok: true, side: o.side, mint: m, sig, amt: o.side === 'sell' ? String(x) : undefined, impact: +imp.toFixed(2), tip: b.tip / 1e9, prio, pre: !!ready, miss: ready ? '' : miss, lap, fast: !!b.msg, route: (b.q.routePlan || []).map(r => (r.swapInfo || {}).label), tx64 };
     if (st && st.supply > 0n) { const qi = +b.q.inAmount, qo = +b.q.outAmount; const px = o.side === 'sell' ? qo / qi : qi / qo; if (px > 0 && isFinite(px)) { res.mc0 = px * Number(st.supply) / 1e9; res.sup = st.supply.toString(); res.mcq = true; } }
     if (o.live === false) {
       const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
@@ -384,7 +394,7 @@ const SOLX = (() => {
     const b = await pumpBuild(Object.assign({}, o, { tip }), st, pub, url);
     if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
-    const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre, route: ['pump.fun'], native: true, tx64,
+    const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), amt: o.side === 'sell' ? String(sellAmount(st.raw, +o.pct)) : undefined, impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre, route: ['pump.fun'], native: true, tx64,
       mc0: Number(st.curve.vQ) * Number(st.supply) / Number(st.curve.vT) / 1e9, sup: st.supply.toString() };
     if (o.live === false) {
       const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
@@ -730,7 +740,7 @@ const SOLX = (() => {
       ix = { prog: PUMP, keys, data: cat(D_SELL, le(amt, 8), le(min, 8)) };
       impact = (1 - Number(out) / Number(amt) / spot) * 100; cu = (o.safe ? CU_SELL : CU_T.sell) + uq(); o.amt = amt;
       /* 3.17.0: selling everything closes the coin's token account in the same transaction: its ~0.002 SOL rent comes straight back */
-      shut = +o.pct >= 100 && amt === st.raw; if (shut) cu += 6000;
+      shut = +o.pct >= 100 && amt === st.raw && !st.flying; if (shut) cu += 6000;
     }
     if (o._raw) {   /* 3.26.0: only this wallet's own steps, for a transaction shared by several wallets (multiTrade) */
       const body = []; if (o.side === 'buy') body.push({ prog: ATAP, keys: [[pub, true, true], [st.ata, false, true], [pub, false, false], [st.mint, false, false], [SYS, false, false], [st.prog, false, false]], data: Uint8Array.of(1) });
@@ -1009,7 +1019,7 @@ const SOLX = (() => {
     } else {
       const amt = sellAmount(st.raw, +o.pct); if (amt <= 0n) throw new Error('you hold none of this token');
       out = poolSell(P, conf, st.supply, amt); const min = out * (10000n - slip) / 10000n; impact = (1 - Number(out) / Number(amt) / spot) * 100; cu = (o.safe ? CU_ASELL : CU_T.asell) + uq() + (v1 ? 30000 : 0); o.amt = amt;
-      const shut = +o.pct >= 100 && amt === st.raw; if (shut) cu += 6000;   /* 3.17.0: all sold -> the coin's token account is closed, its rent comes back */
+      const shut = +o.pct >= 100 && amt === st.raw && !st.flying; if (shut) cu += 6000;   /* 3.17.0: all sold -> the coin's token account is closed, its rent comes back */
       ixs.push(mkAta(wa, WSOL, TOKEN), v1 ? { prog: AMM, keys: v1.sell, data: cat(D_ASELL1, le(amt, 8), le(min, 8)) } : { prog: AMM, keys, data: cat(D_ASELL, le(amt, 8), le(min, 8)) }, close);
       if (shut) ixs.push({ prog: st.prog, keys: [[st.ata, false, true], [pub, false, true], [pub, true, false]], data: Uint8Array.of(9) });
     }
@@ -1030,7 +1040,7 @@ const SOLX = (() => {
     const b = await poolBuild(Object.assign({}, o, { tip }), st, P, pub, url);
     if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
-    const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre: !!(st.live && st.pool), route: ['PumpSwap'], native: true, pool: true, tx64,
+    const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), amt: o.side === 'sell' ? String(sellAmount(st.raw, +o.pct)) : undefined, impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre: !!(st.live && st.pool), route: ['PumpSwap'], native: true, pool: true, tx64,
       mc0: Number(P.Q) * Number(st.supply) / Number(P.B) / 1e9, sup: st.supply.toString() };
     if (o.live === false) {
       const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
