@@ -1257,7 +1257,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     xt.addEventListener('pointermove', e => { if (!d) return; const dy = (e.clientY - d.y) / Z; if (dy > 18) { d.moved = true; set(true); d.y = e.clientY; } else if (dy < -18) { d.moved = true; set(false); d.y = e.clientY; } });
     xt.addEventListener('pointerup', () => { if (!d) return; if (!d.moved) set(!EXT); d = null; });
   })();
-  const PWMIN = 280, PWMAX = 560, KHMIN = 28, KHMAX = 72; let KH = 33;   /* 3.27.2: keys 33 by default (reference look); the edges still make them taller */
+  const PWMIN = 280, PWMAX = 760, KHMIN = 28, KHMAX = 160; let KH = 33;   /* 3.27.4 (owner: "growing up feels capped"): keys up to 160 high, panel up to 760 wide */   /* 3.27.2: keys 33 by default (reference look); the edges still make them taller */
   (function resize() {
     /* 3.20.2 (owner: "pull right = it gets wider, the same up and down"): every edge and corner changes the SIZE, it never scales.
        Left / right = width (the keys widen), top / bottom = height (the keys get taller); the text keeps its size; the opposite side stays put.
