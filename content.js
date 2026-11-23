@@ -535,7 +535,9 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
 .rs button.c{font-size:10.5px}
 .hero .cp .v2{font-weight:700}
 .hero .fc:not(.cp) .k2{width:auto;justify-content:center}   /* label and number on one axis (owner) */
-.hero .fc{gap:0}.hero .k2{line-height:11px}.hero .fc:not(.cp) .v2{justify-content:center;text-align:center}   /* 3.27.2: label sits close above the number, as in the reference */
+.hero .fc{gap:0}.hero .k2{line-height:11px}
+.hero .fc .k2{height:14px;align-items:center}.hero .fc .v2{height:22px;align-items:center}.hero .shr{height:14px}
+.hero .k2,.hero .k2 .pp{font-size:10.5px}.hero .k2{color:#9499A6}.hero .fc:not(.cp) .v2,.hero .fc:not(.cp) .v2 *{font-size:13px;font-weight:600}.hero .cp .v2{font-size:16px}.hero .cp .k2{position:relative;top:1px}.hero .cp .v2{position:relative;top:-1px}   /* 3.27.3 (owner: footer text too small to read) */   /* 3.27.3: every cell has the label line and the number line at the same heights, so the four cells read as two straight rows */.hero .fc:not(.cp) .v2{justify-content:center;text-align:center}   /* 3.27.2: label sits close above the number, as in the reference */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
 <linearGradient id="hkSpf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37D399" stop-opacity=".18"/><stop offset="1" stop-color="#37D399" stop-opacity="0"/></linearGradient>
