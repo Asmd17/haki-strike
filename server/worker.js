@@ -2,6 +2,7 @@ import APP_CSS from './ui/app.css';
 import APP_JS from './ui/app.js.txt';
 import LOGO from './logo.svg';
 import PRIVACY from './ui/privacy.html';
+import { licHello, licPaid, licAdmin, licAct } from './lic.js';
 
 /* HAKI Strike stats API + admin (Cloudflare Worker, D1).
    What the extension sends: a random install ID, its version, the site (axiom / gmgn / padre), the chain (sol / bsc), error texts with
@@ -120,6 +121,8 @@ export default {
         if (p === '/v1/ping') return await ping(env, req);
         if (p === '/v1/err') return await err(env, req);
         if (p === '/v1/report') return await report(env, req);
+        if (p === '/v1/lic') return await licHello(env, req, await body(req, 8000), J, CORS);
+        if (p === '/v1/paid') return await licPaid(env, await body(req, 1000), J, CORS);
         return J({ ok: false }, 404, CORS);
       }
       if (p === '/admin/app.js') return new Response(APP_JS, { headers: { 'content-type': 'text/javascript; charset=utf-8', ...SEC } });
@@ -133,7 +136,8 @@ export default {
       if (p === '/admin' || p === '/admin/') return new Response(page(await authed(env, req)), { headers: { 'content-type': 'text/html; charset=utf-8', ...SEC } });
       if (p.startsWith('/admin/api/')) {
         if (!(await authed(env, req))) return J({ ok: false }, 401, SEC);
-        if (p === '/admin/api/data') return J(await data(env), 200, SEC);
+        if (p === '/admin/api/data') return J(Object.assign(await data(env), { lic: await licAdmin(env) }), 200, SEC);
+        if (p === '/admin/api/lic' && req.method === 'POST' && req.headers.get('x-hk') === '1') { try { return J(await licAct(env, await body(req, 3000)), 200, SEC); } catch (e) { return J({ ok: false, why: String(e.message || e) }, 400, SEC); } }
         if (p === '/admin/api/report' && req.method === 'POST' && req.headers.get('x-hk') === '1') {
           const o = await body(req, 3000), st = ['open', 'solved', 'ignored'].includes(o.status) ? o.status : null; if (!st) return J({ ok: false }, 400, SEC);
           await env.DB.prepare('UPDATE reports SET status=?, note=? WHERE rid=?').bind(st, clean(o.note, 500), +o.rid || 0).run(); return J({ ok: true }, 200, SEC);

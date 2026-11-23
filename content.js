@@ -99,6 +99,10 @@
 
   /* HAKI's font (Medeo Sans, OFL), loaded into the page's font set from our own file so the shadow root can use it */
   (async () => { try { const b2 = await (await fetch(chrome.runtime.getURL('fonts/medeo-latin.woff2'))).arrayBuffer(); const f2 = new FontFace('HakiMedeo', b2, { weight: '100 900' }); await f2.load(); document.fonts.add(f2); } catch (_) {} })();
+  (async () => {   /* 3.28.0: a device hash for the one-free-week rule (screen, graphics chip, CPU count, time zone; only the hash leaves) */
+    try { const { fp = '' } = await chrome.storage.local.get({ fp: '' }); if (fp) return; let gl = ''; try { const x = document.createElement('canvas').getContext('webgl'), d = x && x.getExtension('WEBGL_debug_renderer_info'); gl = d ? x.getParameter(d.UNMASKED_RENDERER_WEBGL) + '|' + x.getParameter(d.UNMASKED_VENDOR_WEBGL) : ''; } catch (_) {}
+      const str = [gl, screen.width + 'x' + screen.height + 'x' + screen.colorDepth, navigator.hardwareConcurrency, navigator.deviceMemory, Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.platform].join('|');
+      const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))); await chrome.storage.local.set({ fp: [...h.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join('') }); } catch (_) {} })();
   (async () => { try { const b3 = await (await fetch(chrome.runtime.getURL('fonts/inter-latin.woff2'))).arrayBuffer(); const f3 = new FontFace('HakiInter', b3, { weight: '100 900' }); await f3.load(); document.fonts.add(f3); } catch (_) {} })();   /* 3.27.1: Inter, as in the owner's reference */
   (async () => { try { const buf = await (await fetch(chrome.runtime.getURL('fonts/geist-latin.woff2'))).arrayBuffer(); const f = new FontFace('HakiGeist', buf, { weight: '100 900' }); await f.load(); document.fonts.add(f); } catch (_) {} })();
 
@@ -278,7 +282,7 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .wmpt{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}.wmpt b{color:#EDEEF0;font-weight:600}.wmpt .pbal{color:#F5A524;font-size:11px}.wmpt .pbal:empty{display:none}
 .wmp .prs{height:24px;padding:0 8px;border-radius:6px;color:#A9ADB4;font-weight:600}.wmp .prs:hover{background:#1E1F23;color:#EDEEF0}
 .p.paper{box-shadow:inset 0 2px 0 #F5A524,0 0 0 1px #2A2D39,0 24px 60px -12px rgba(0,0,0,.85)}
-.p.paper .wal .wn{display:none}.p.paper .wal .wb{display:inline!important;color:#F5A524;font-size:0}.p.paper .wal .wb:before{content:"Paper";font-size:12px;font-weight:600}
+
 .p.paper .shr{display:none}
 .wmh .sp{flex:1}
 .wmh button{height:24px;padding:0 6px;border-radius:6px;color:#A9ADB4;font-weight:600}.wmh button:hover{background:#1E1F23;color:#EDEEF0}
@@ -553,7 +557,18 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
 .tb .kbt.acc{color:#3DDC97;background:rgba(47,210,138,.14);box-shadow:inset 0 0 0 1px rgba(47,210,138,.6)}
 .tb .kbt:hover{color:#E3E5EB}
 .tb .kbt.acc:hover{color:#5BF0B2}
-.p.paper .wal svg{display:none}.p.paper .wal .wb:before{font-size:10.5px}.p.paper .wal{padding:0 7px}   /* 3.27.6: "Paper" fits the header */
+/* 3.28.0 (owner: Paper inside the wallet menu confused people): its own button in the header; the wallet menu shows the paper money only while it is on */
+.ppb{height:21px;padding:0 6px;margin-left:3px;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);color:#8A8F9C;font-size:10.5px;font-weight:500;flex:none;transition:color .12s,background-color .12s,box-shadow .12s}
+.ppb:hover{color:#E3E5EB}
+.ppb.on{color:#F5A524;background:rgba(245,165,36,.12);box-shadow:inset 0 0 0 1px rgba(245,165,36,.55)}
+.ppb.on:hover{color:#FFC25A}
+.tabs button{padding:0 6px}
+.tb .mk{margin-right:8px}
+.tb .edt,.tb .cfg{width:23px}
+.wal{margin-left:3px}
+.ppb{padding:0 5px;margin-left:1px}.tabs button{padding:0 5.5px}.tb .kbt{width:23px}.tb .edt,.tb .cfg{width:22px}.wal{padding:0 5px}
+.wmp .aut{display:none}
+.wm:not(.ppon) .wmp{display:none}
 .tb{height:41px}   /* 40 inside the 1px line: the 18px logo sits on whole pixels */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
@@ -564,6 +579,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   <img class="mk" src="${chrome.runtime.getURL('icons/mark-18.png')}" srcset="${[[18, 1], [23, 1.25], [27, 1.5], [36, 2], [54, 3]].map(([n, x]) => chrome.runtime.getURL('icons/mark-' + n + '.png') + ' ' + x + 'x').join(', ')}" width="18" height="18" alt="HAKI" draggable="false">
   <button class="ib kbt" title="Hotkeys: hold Space, then Q W E R to buy, A S D F to sell" aria-label="Hotkeys">${I.kb}</button>
   <div class="tabs" role="tablist" aria-label="Presets"><button data-p="0">${I.p[0]}P1</button><button data-p="1">${I.p[1]}P2</button><button data-p="2">${I.p[2]}P3</button></div>
+  <button class="ppb" type="button" aria-pressed="false" title="Paper trading: practice on live prices with play money. Nothing is signed or sent">Paper</button>
   <button class="ib edt" title="Edit the buy and sell amounts" aria-label="Edit amounts">${I.pen}</button>
   <span class="sp"></span>
   <button class="ib cfg" title="Settings" aria-label="Settings">${I.gear}</button>
@@ -715,7 +731,9 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   }
   function paperUi() {
     P.classList.toggle('paper', PAPER); const t = $('.ppr'); if (t) t.checked = PAPER;
-    $('.wal').title = PAPER ? 'Paper trading is on: play money, nothing is sent. Click to switch it off' : 'Wallets: choose which ones trade';
+    const pb = $('.ppb'); if (pb) { pb.classList.toggle('on', PAPER); pb.setAttribute('aria-pressed', String(PAPER)); pb.title = PAPER ? 'Paper trading is on: play money, nothing is sent. Click to trade for real' : 'Paper trading: practice on live prices with play money. Nothing is signed or sent'; }
+    WM.classList.toggle('ppon', PAPER);
+    $('.wal').title = 'Wallets: choose which ones trade';
     if (PAPER) { last = null; paperPoll(); } else { const e = $('.pbal'); if (e) e.textContent = ''; refreshBal(); watchNow(); }
   }
   const paintBal = () => { const t = bal == null ? '–' : (+bal).toFixed(bal >= 100 ? 1 : 3); $('.wb').textContent = t; $('.wb').hidden = nW > 1; $('.bal').textContent = bal == null ? '–' : (+bal).toFixed(3); };
@@ -1139,6 +1157,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (!r || r.err) { status('Snipe: ' + ((r && r.err) || 'failed'), 'bad'); return; }
     snpSet(r.armed); status('Snipe armed: ' + sol + ' SOL the moment this coin migrates (keep Chrome open)', 'ok');
   };
+  $('.ppb').onclick = async e => { if (!e.isTrusted) return; const r = await send('paperSet', { on: !PAPER }); PAPER = !!(r && r.on); paperUi(); status(PAPER ? 'Paper trading on: play money at live prices, nothing is sent' : 'Paper trading off: trades are real again', PAPER ? 'ok' : ''); };
   $('.ppr').onchange = async e => { const r = await send('paperSet', { on: e.target.checked }); PAPER = !!(r && r.on); paperUi(); if (PAPER) status('Paper trading on: play money at live prices, nothing is sent', 'ok'); };
   $('.prs').onclick = async e => { e.stopPropagation(); const r = await send('paperSet', { reset: true }); paperBal(r && (BSCM() ? r.bnb : r.sol)); if (PAPER) paperPoll(); status('Paper money reset: 10 SOL and 1 BNB', 'ok'); };
   chrome.storage.local.get({ paper: null }).then(o => { const on = !!(o.paper && o.paper.on); if (on !== PAPER) { PAPER = on; paperUi(); } }).catch(() => {});

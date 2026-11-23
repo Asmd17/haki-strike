@@ -125,6 +125,41 @@ async function iid() {
 const teleOn = async () => (await chrome.storage.local.get({ tele: true })).tele !== false;
 const apiPost = (p, o) => fetch(API + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o), signal: AbortSignal.timeout(8000) }).then(r => r.json()).catch(() => null);
 const osOf = () => { try { return String((navigator.userAgentData && navigator.userAgentData.platform) || '').slice(0, 16); } catch (_) { return ''; } };
+/* ---- 3.28.0 subscription: 1 SOL / 30 days, 7 days free once, paper trading always free. The server answers with a token signed by HAKI
+   (Ed25519); it is checked here with the public key below, so a fake answer does not count. Buying, Snipe and Multi launch need it;
+   SELLING NEVER DOES (what you hold can always be sold). Sent: the install ID, a device hash, your wallet ADDRESSES each with a signature
+   of "HAKI Strike license <id> <time>" (proof the wallet is here, never a key). ---- */
+const LICPUB = 'qwx2gAqcjjzKSEyjztDluXLMhe9aCj/nQ8lkes8wSTs=';
+async function licRead(L) {
+  try { const k = await crypto.subtle.importKey('raw', SOLX.unb64(LICPUB), 'Ed25519', false, ['verify']);
+    if (!(await crypto.subtle.verify('Ed25519', k, SOLX.unb64(L.sig), new TextEncoder().encode(L.tok)))) return null;
+    const p = JSON.parse(L.tok); return p.id === await iid() ? p : null; } catch (_) { return null; }
+}
+async function licState() {
+  const { lic = null } = await chrome.storage.local.get({ lic: null }), p = lic && await licRead(lic), now = Date.now();
+  if (!p) return { st: 'unknown', ok: false };
+  return Object.assign({}, p, { ok: ['free', 'paid', 'trial', 'open'].includes(p.st) && p.until > now && p.exp > now, left: Math.max(0, p.until - now) });
+}
+let LICP = null;
+async function licHello(force, check) {
+  const { licAt = 0 } = await chrome.storage.local.get({ licAt: 0 });
+  if (!force && !check && Date.now() - licAt < 20 * 60e3) { const s = await licState(); if (s.st !== 'unknown') return s; }
+  if (LICP) return LICP;
+  LICP = (async () => {
+    const id = await iid(), t = Date.now(), K = await seedsAll(), W = await walletsAll(), msg = new TextEncoder().encode('HAKI Strike license ' + id + ' ' + t), w = [];
+    for (const x of W) if (K[x.pub]) try { w.push({ pub: x.pub, sig: SOLX.b58e(await SOLX.sign(SOLX.unb64(K[x.pub]), msg)) }); } catch (_) {}
+    const { fp = '' } = await chrome.storage.local.get({ fp: '' }), bsc = (await bwalletsAll()).length > 0;
+    const r = await apiPost('/v1/lic', { id, ver: VERS, t, fp, w, bsc, check: !!check });
+    if (r && r.tok && r.sig && await licRead(r)) await chrome.storage.local.set({ lic: { tok: r.tok, sig: r.sig }, licAt: Date.now() });
+    return licState();
+  })().finally(() => { LICP = null; });
+  return LICP;
+}
+const licWhy = s => s.st === 'ended' ? 'Your HAKI Strike ' + (s.paidBefore ? 'subscription' : 'free week') + ' has ended. Renew: Settings → Subscription (' + s.price + ' SOL / 30 days). Selling still works.'
+  : s.st === 'notrial' ? 'The free week was already used on this PC, network or wallet. Subscribe: Settings → Subscription (' + s.price + ' SOL / 30 days). Selling still works.'
+  : s.st === 'pending' ? 'Unlock your wallet once so HAKI Strike can start your free week'
+  : 'Could not check your HAKI Strike subscription (no connection?). Try again in a moment. Selling still works.';
+async function licGate() { let s = await licState(); if (!s.ok) s = await licHello(true); if (!s.ok) throw new Error(licWhy(s)); }
 let PINGING = false;
 async function telePing(host, chain) {   /* at most every 6 h: counts you as active today */
   if (!(await teleOn()) || PINGING) return; const { tping2 = 0 } = await chrome.storage.local.get({ tping2: 0 }); if (Date.now() - tping2 < 6 * 3600e3) return;
@@ -730,7 +765,15 @@ async function handle(m) {
   }
   if (m.op === 'calloutCheck') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint), v = await pfElig(mint); return { v, left: (PFL.get(mint) || {}).left || 0 }; }
   if (m.op === 'callout') { const mint = /^0x[0-9a-f]{40}$/i.test(a.a || '') ? a.a : await SOLX.mintOf(a.a, rpcUrl(c), !!a.isMint);   /* 3.14.3: pump.fun takes BSC coins by their 0x address (x2 boost) */ return pfCallout(mint, a.text, 45000, !!a.update); }
-  if (m.op === 'snipe') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); return SNIPE.op(a, c); }
+  if (m.op === 'snipe') { if (typeof SNIPE === 'undefined') throw new Error('not in this build'); if (a.do === 'arm') await licGate(); return SNIPE.op(a, c); }
+  if (m.op === 'lic') return a.check ? licHello(true, true) : a.force ? licHello(true) : licHello(false);
+  if (m.op === 'licPay') {   /* popup only: pay from one of YOUR wallets to HAKI's address shown in the signed token (never an address from a page) */
+    const s = await licHello(true); if (!s.treasury) throw new Error('Payments are not open yet');
+    const K = await seedsAll(), W = await walletsAll(), w = W.find(x => x.pub === a.pub); if (!w || !K[w.pub]) throw new Error('Unlock this wallet first');
+    const lam = Math.round(+s.pay * 1e9); if (!(lam > 0)) throw new Error('bad amount');
+    const sig = await SOLX.paySol(SOLX.unb64(K[w.pub]), w.pub, s.treasury, lam, 'HAKI-' + s.code, rpcUrl(c));
+    const r = await apiPost('/v1/paid', { id: await iid(), sig }); return Object.assign({ sig, credited: !!(r && r.ok) }, await licHello(true));
+  }
   if (m.op === 'speedStats') {   /* 3.26.0: Settings -> Speed and fees -> Your speed */
     const H = SPD.h.filter(x => x.ok), med = L => { if (!L.length) return null; const s = [...L].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
     const k = [0, 1, 2].includes(+c.preset) ? +c.preset : 0, f0 = feeT0(c, 'buy'), f1 = feeT(c, 'buy');
@@ -821,6 +864,7 @@ async function handle(m) {
     const BK = {}; for (const w of BW) { try { BK[w.addr] = SOLX.b64(await SOLX.unseal(w.box, a.pass)); } catch (_) { if (!W.length && w === BW[0]) throw new Error('wrong password'); } }   /* 3.14.0 BSC */
     await chrome.storage.session.set({ seeds: K, bseeds: BK }); await chrome.storage.session.remove('seed');
     if (a.keep) { await keepSave(K); await bkeepSave(BK); } else { await keepClear(); await chrome.storage.local.remove('bkeep'); }
+    licHello(true).catch(() => {});   /* 3.28.0: the wallets are proven now (the free week can start) */
     return { ok: true, wallet: W[0].pub, n: Object.keys(K).length, keep: !!a.keep };
   }
   if (m.op === 'lock') { LOCKGEN++; await keepClear(); await chrome.storage.local.remove('bkeep'); await chrome.storage.session.remove(['seed', 'seeds', 'bseeds']); return { ok: true }; }
@@ -852,6 +896,7 @@ async function handle(m) {
     return Object.assign(p, { bnb, wallet: !!w, aslip });
   }
   if (m.op === 'bscTrade') {   /* {side, token, bnb | pct} with the BSC settings (slippage, gas) */
+    if (a.side !== 'sell') await licGate();
     const { addr, key } = await bscKey();
     const maxB = Math.min(100, Math.max(0.001, +c.maxBnb || 2));   /* 3.21.5 security: a cap per BNB buy, as Max per trade on Solana */
     if (a.side === 'buy' && !(+a.bnb > 0 && +a.bnb <= maxB)) throw new Error('above your BNB cap per trade (' + maxB + ' BNB, Settings → Buy and sell)');
@@ -932,6 +977,7 @@ async function handle(m) {
   if (m.op === 'lwInfo') { const L = await lwLoad().catch(() => []), { lwGot = 0 } = await chrome.storage.local.get({ lwGot: 0 }); return { n: L.length, got: lwGot / 1e9 }; }
   if (m.op === 'lwClaimNow') { await lwClaim(); const { lwGot = 0 } = await chrome.storage.local.get({ lwGot: 0 }); return { ok: true, got: lwGot / 1e9 }; }
   if (m.op === 'launch') {   /* 3.9.0 Multi launch: n new pump.fun coins with the metadata of the coin on the page, from the launch wallet */
+    await licGate();
     const c = await cfg(), W = await walletsAll(), K = await seedsAll(), w = W.find(x => x.pub === c.spamW);
     if (!w) throw new Error('choose a launch wallet in Settings > Wallets first');
     if (!K[w.pub]) throw new Error((w.label || 'the launch wallet') + ' is locked: unlock it in Settings');
@@ -1042,6 +1088,7 @@ async function handle(m) {
   }
   if (m.op === 'resetPnl') { const { led = {} } = await chrome.storage.local.get({ led: {} }); delete led[a.mint]; await chrome.storage.local.set({ led }); return { ok: true }; }
   if (m.op === 'trade') {   /* every trading wallet at once: each buys the amount / sells its own %; one wallet failing does not stop the others */
+    if (a.side !== 'sell') await licGate();   /* 3.28.0: buying needs the subscription (or the free week); selling never does */
     const K = await seedsAll(), ready = SW.filter(w => K[w.pub]);
     if (!ready.length) throw new Error('Locked: click the HAKI icon in Chrome’s toolbar, type your password once and keep “Stay unlocked” on');
     const ck = String(a.key || ''); if (ck.length < 8) throw new Error('missing click key');
@@ -1275,10 +1322,11 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return false;
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
-  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
+  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'licPay'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
   if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
   handle(m).then(reply, e => { const t = String((e && e.message) || e).slice(0, 220); if (!['tx', 'wallets', 'cfg', 'pos', 'coin'].includes(m.op)) teleErr(m.op, t); reply({ err: t }); });
   return true;
 });
 /* 3.25.0: an optional add-on of the owner's own build (absent elsewhere: nothing happens) */
+setTimeout(() => licHello(false).catch(() => {}), 3000);   /* 3.28.0: the subscription token, refreshed at most every 20 min */
 try { importScripts('snipe.js'); } catch (_) {}

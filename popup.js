@@ -333,3 +333,44 @@ $('bGo').onclick = async () => {
 (async () => {
   paintBsc();
 })();
+
+/* ---- 3.28.0 subscription ---- */
+const SUBD = t => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const subDays = ms => { const d = Math.max(0, Math.ceil(ms / 864e5)); return d + (d === 1 ? ' day' : ' days'); };
+let SUB = null;
+function subPaint(s) {
+  SUB = s; const st = s && s.st, now = Date.now();
+  const T = { open: ['Free for now', 'ok', 'Subscriptions have not started yet: everything works. Your free week starts when they do.'], free: ['Free for good', 'ok', 'Nothing to pay on this account.'], paid: ['Active', 'ok', 'Paid until ' + SUBD(s && s.until) + ' (' + subDays((s && s.until) - now) + ' left).'],
+    trial: ['Free week', 'warn', subDays((s && s.until) - now) + ' left, until ' + SUBD(s && s.until) + '. Pay any time: the 30 days start after it.'],
+    ended: ['Ended', 'bad', 'Buying is paused. Selling, wallets and paper trading still work.'],
+    notrial: ['No free week', 'bad', 'The free week was already used on this PC, network or wallet. Buying is paused until you subscribe; selling still works.'],
+    pending: ['Not started', '', 'Unlock your wallet (Wallets) and your free week starts.'], unknown: ['Could not check', '', 'No answer from the server. Try again in a moment.'] }[st] || ['Checking…', '', ''];
+  $('subSt').textContent = T[0]; $('subDot').className = 'subdot' + (T[1] ? ' ' + T[1] : ''); $('subUntil').textContent = T[2];
+  const bar = st === 'trial' || st === 'paid'; $('subBar').hidden = !bar;
+  if (bar) { const tot = st === 'trial' ? (s.trialDays || 7) * 864e5 : Math.max(30 * 864e5, s.until - now); $('subFill').style.width = Math.max(3, Math.min(100, (s.until - now) / tot * 100)) + '%'; }
+  const can = !!(s && s.treasury) && !['free', 'unknown', 'open'].includes(st); $('subPayS').hidden = !can; $('subManS').hidden = !can;
+  if (s && s.price) $('subLead').textContent = 'HAKI Strike is ' + s.price + ' SOL for 30 days' + (s.trialDays ? ', the first ' + s.trialDays + ' days free' : '') + '. Paper trading is always free, and selling never needs a subscription.';
+  if (can) { $('subAmt').textContent = s.price + ' SOL · 30 days'; $('subTo').textContent = 'To HAKI: ' + s.treasury.slice(0, 4) + '…' + s.treasury.slice(-4); $('subExact').textContent = s.pay + ' SOL'; $('subAddr').textContent = s.treasury; }
+}
+async function subLoad(k) { try { const r = await ask('lic', k ? { [k]: true } : {}); subPaint(r && !r.err ? r : { st: 'unknown' }); } catch (_) { subPaint({ st: 'unknown' }); } }
+async function subWallets() {
+  const r = await ask('wallets', {}).catch(() => null), L = (r && r.list) || [], sel = $('subW'); sel.textContent = '';
+  for (const w of L) { const o = document.createElement('option'); o.value = w.pub; o.textContent = w.label + (w.sol != null ? ' · ' + (+w.sol).toFixed(3) + ' SOL' : '') + (w.open ? '' : ' · locked'); o.disabled = !w.open; sel.append(o); }
+}
+$('subPay').onclick = async () => {
+  if (!SUB || !SUB.treasury) return; const pub = $('subW').value; if (!pub) { say('subMsg', 'Unlock a wallet first (Wallets)', 'bad'); return; }
+  const lab = $('subW').selectedOptions[0] ? $('subW').selectedOptions[0].textContent.split(' · ')[0] : 'your wallet';
+  if (!confirm('Send ' + SUB.pay + ' SOL from ' + lab + ' to HAKI (' + SUB.treasury.slice(0, 4) + '…' + SUB.treasury.slice(-4) + ') for 30 days of HAKI Strike?')) return;
+  $('subPay').disabled = true; say('subMsg', 'Sending…');
+  try { const r = await ask('licPay', { pub }); if (!r || r.err) throw new Error((r && r.err) || 'failed');
+    subPaint(r); say('subMsg', r.credited ? 'Paid. Thank you: 30 days added.' : 'Sent. It shows up here within a minute.', 'ok'); if (!r.credited) setTimeout(() => subLoad('check'), 20000); subWallets(); }
+  catch (e) { say('subMsg', String(e.message || e), 'bad'); } finally { $('subPay').disabled = false; }
+};
+$('subCheck').onclick = async () => { say('subMsg', 'Looking for your payment…'); const before = SUB && SUB.until; await subLoad('check'); const ok = SUB && SUB.st === 'paid' && SUB.until !== before; say('subMsg', ok ? 'Found it. Thank you: days added.' : 'Not found yet. Wait a minute after sending and check again.', ok ? 'ok' : ''); };
+document.querySelectorAll('[data-cp]').forEach(b => { b.onclick = async () => { try { await navigator.clipboard.writeText($(b.dataset.cp).textContent.replace(/ SOL$/, '')); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1200); } catch (_) {} }; });
+(async () => {   /* a device hash for the one-free-week rule: screen, graphics chip, CPU count, time zone (no names; only the hash leaves) */
+  try { const { fp = '' } = await chrome.storage.local.get({ fp: '' }); if (!fp) { let gl = ''; try { const c = document.createElement('canvas').getContext('webgl'), d = c && c.getExtension('WEBGL_debug_renderer_info'); gl = d ? c.getParameter(d.UNMASKED_RENDERER_WEBGL) + '|' + c.getParameter(d.UNMASKED_VENDOR_WEBGL) : ''; } catch (_) {}
+    const str = [gl, screen.width + 'x' + screen.height + 'x' + screen.colorDepth, navigator.hardwareConcurrency, navigator.deviceMemory, Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.platform].join('|');
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str))); await chrome.storage.local.set({ fp: [...h.slice(0, 12)].map(x => x.toString(16).padStart(2, '0')).join('') }); } } catch (_) {}
+  subLoad(); subWallets();
+})();

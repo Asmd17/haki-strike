@@ -1324,6 +1324,13 @@ const SOLX = (() => {
     return { sig: await sendWait(b64(cat(Uint8Array.of(1), sg, msg)), url), lamports: lam };
   }
   /* SOL from one of your wallets to another of your wallets */
+  /* 3.28.0 subscription payment: SOL to the HAKI address + a memo naming the subscription (Memo v1: no accounts) */
+  async function paySol(seed, from, to, lamports, memo, url) {
+    const ix = { prog: SYS, keys: [[from, true, true], [to, false, true]], data: cat(le(2, 4), le(lamports, 8)) };
+    const mo = { prog: 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo', keys: [], data: new TextEncoder().encode(memo) };
+    const msg = compile(from, [cuLimit(20000), cuPrice(20000), ix, mo], await blockhash.refresh(url)), sg = await sign(seed, msg);
+    return sendWait(b64(cat(Uint8Array.of(1), sg, msg)), url);
+  }
   async function moveSol(seed, from, to, lamports, url) {
     const ix = { prog: SYS, keys: [[from, true, true], [to, false, true]], data: cat(le(2, 4), le(lamports, 8)) };
     const msg = compile(from, [cuLimit(1000), cuPrice(20000), ix], await blockhash.refresh(url)), sg = await sign(seed, msg);
@@ -1344,7 +1351,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { paySol, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64 };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

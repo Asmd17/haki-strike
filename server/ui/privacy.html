@@ -17,7 +17,7 @@ a{color:var(--t1)}
 <header><img src="/admin/logo.svg" alt=""><b>HAKI Strike</b></header>
 <h1>Privacy policy</h1>
 <p class="up">Last updated 22 November 2026</p>
-<div class="box">Your wallets and private keys never leave your browser. HAKI never receives a key, a wallet address, a balance or a trade.</div>
+<div class="box">Your private keys never leave your browser. HAKI never receives a key, a balance or a trade. For the subscription it receives your public wallet addresses (already visible to anyone on the blockchain).</div>
 
 <h2>What stays on your computer</h2>
 <p>Private keys are encrypted with your password (AES-256-GCM, PBKDF2 with 600,000 rounds) and stored only in your browser. Trades are built and signed on your computer and sent straight to the blockchain networks (Solana, BNB Chain) and their transaction services. Your settings, trade history and Paper trading balance are stored in your browser too.</p>
@@ -25,12 +25,22 @@ a{color:var(--t1)}
 <h2>What HAKI receives</h2>
 <p>So we can count users and fix bugs, the extension sends to HAKI's own service (a Cloudflare Worker):</p>
 <ul>
-<li><strong>A random install ID</strong>, made by the extension. It is not linked to you, your wallets or your browser account.</li>
+<li><strong>A random install ID</strong>, made by the extension. It is not linked to your browser account.</li>
 <li><strong>Version, site and chain:</strong> the extension version, which trading site the panel ran on (Axiom, GMGN or Terminal) and the chain (Solana or BNB Chain). Sent at most once every 6 hours while you use it.</li>
 <li><strong>Error texts:</strong> what went wrong, with every address, signature and number removed on your computer before it is sent.</li>
 <li><strong>Reports you choose to send</strong> from Settings, Report a problem: your text, your HAKI settings (presets, hotkey mode, number of wallets) and the last error texts.</li>
 </ul>
 <p>You can turn the automatic part off at any time: Settings, Report a problem, Anonymous stats.</p>
+
+<h2>Subscription</h2>
+<p>HAKI Strike is paid by the month, with one free week per person. To run that, the extension sends, about every 20 minutes while it is open:</p>
+<ul>
+<li><strong>The install ID</strong> (above).</li>
+<li><strong>Your public wallet addresses</strong>, each with a signature made by that wallet over a fixed text ("HAKI Strike license", the install ID and the time). The signature only proves the wallet is in your extension; it cannot move funds and it is not a key.</li>
+<li><strong>A device hash:</strong> one-way hash of the screen size, graphics chip name, number of CPU cores and time zone. The values themselves are not sent.</li>
+<li><strong>Your IP address</strong> is seen by the service and kept only as a one-way hash.</li>
+</ul>
+<p>These are used for one thing: to give the free week once per person and to know who has paid. HAKI may look up, on the public blockchain, which wallet first funded a new wallet, for the same reason. Payments are ordinary Solana transfers to HAKI's address; HAKI keeps the transaction signature, the amount and the sending address. Subscription records are kept while you use HAKI Strike and for up to 12 months after.</p>
 
 <h2>What we do with it</h2>
 <p>Only to see how many people use HAKI Strike, which versions they run and what breaks, and to answer reports. It is not sold, not shared with anyone, not used for advertising and not used to decide anything about you. Usage records are kept for up to 12 months; reports until they are solved and for up to 12 months after.</p>

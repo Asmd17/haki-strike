@@ -90,8 +90,7 @@
     row.onclick = () => { OPEN.has(x.rid) ? OPEN.delete(x.rid) : OPEN.add(x.rid); draw(); };
     w.append(row);
     if (OPEN.has(x.rid)) {
-      const d = el('div', 'rd'); if (x.text.includes('
-') || x.text.length > 110) d.append(el('div', 'full', x.text));   /* a one-line report is already shown in full above */
+      const d = el('div', 'rd'); if (x.text.includes('\n') || x.text.length > 110) d.append(el('div', 'full', x.text));   /* a one-line report is already shown in full above */
       let c = {}; try { c = JSON.parse(x.ctx || '{}'); } catch (_) {}
       const kv = el('div', 'kv'); for (const [k, l] of CTX) if (c[k] != null && c[k] !== '') { const cell = el('div'); cell.append(el('span', '', l), el('b', '', typeof c[k] === 'boolean' ? (c[k] ? 'Yes' : 'No') : String(c[k]))); kv.append(cell); }
       if (kv.children.length) { d.append(el('div', 'sub', 'Their setup'), kv); }
@@ -109,6 +108,52 @@
     return w;
   }
 
+  /* ---- subscriptions (2026-11-22) ---- */
+  const solf = v => (+v || 0).toFixed((+v || 0) >= 100 ? 1 : 3).replace(/\.?0+$/, '') + ' SOL';
+  const dshort = t => t ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '–';
+  async function act(o) {
+    const r = await fetch('/admin/api/lic', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-hk': '1' }, body: JSON.stringify(o) }).then(x => x.json()).catch(() => null);
+    if (!r || !r.ok) alert((r && r.why) || 'Failed'); await load(); return r;
+  }
+  const ST = { open: ['Free (payments off)', ''], paid: ['Paying', 'up'], trial: ['Free week', 'wn'], ended: ['Ended', 'dn'], notrial: ['No free week', 'dn'], free: ['Free', ''], pending: ['Not started', ''] };
+  function subs(S) {
+    const card = el('div', 'card'); card.id = 'subs'; const h = el('div', 'ch'); h.append(el('h2', '', 'Subscriptions'), el('span', 'muted', S.conf.price + ' SOL / 30 days · ' + S.conf.trialDays + ' days free'), el('span', 'sp'));
+    const scan = el('button', 'sec', 'Check payments now'); scan.onclick = async () => { scan.disabled = true; const r = await act({ act: 'scan' }); scan.disabled = false; if (r && r.ok) scan.textContent = r.n ? r.n + ' new payment(s)' : 'Nothing new'; };
+    h.append(scan); card.append(h);
+    const k = el('div', 'kpis sk');
+    for (const [l, v, c] of [['Paying now', S.counts.paid, 'up'], ['On free week', S.counts.trial, 'wn'], ['Ended / refused', S.counts.ended, ''], ['Revenue, 30 days', solf(S.month), 'up'], ['Revenue, all time', solf(S.revenue), '']]) {
+      const x = el('div', 'kpi sm'); x.append(el('div', 'l', l)); const vv = el('div', 'v' + (c ? ' ' + c : ''), String(v)); x.append(vv); k.append(x); }
+    card.append(k);
+    /* settings */
+    const f = el('div', 'subf');
+    const inp = (lab, val, ph, w) => { const L = el('label'); L.append(el('span', '', lab)); const i = el('input'); i.value = val == null ? '' : val; i.placeholder = ph || ''; if (w) i.style.width = w; L.append(i); f.append(L); return i; };
+    const tr = inp('Payments go to', S.conf.treasury, 'Solana address', '360px'), pr = inp('Price, SOL / 30 days', S.conf.price, '1', '120px'), td = inp('Free days', S.conf.trialDays, '7', '90px'), ow = inp('Also free (wallets)', S.conf.owners, 'addresses, space-separated', '260px');
+    const sv = el('button', 'sec', 'Save'); sv.onclick = () => act({ act: 'conf', treasury: tr.value.trim(), price: +pr.value, trialDays: +td.value, owners: ow.value }); f.append(sv);
+    const en = el('button', S.conf.enforce ? 'sec' : 'pri en', S.conf.enforce ? 'Switch payments off' : 'Switch payments on'); en.onclick = () => { if (!confirm(S.conf.enforce ? 'Switch payments off? Everyone trades free until you switch them on again.' : 'Switch payments on? Free weeks start now; after them buying needs a subscription.')) return; act({ act: 'conf', enforce: !S.conf.enforce }); }; f.append(en);
+    card.append(f);
+    if (!S.conf.enforce) card.append(el('p', 'warnl', S.conf.treasury ? 'Payments are off: everyone trades free. Switch them on when you are ready.' : 'Payments are off: everyone trades free. Fill in “Payments go to”, Save, then switch payments on.'));
+    /* users */
+    const tw = el('div', 'tw'), t = el('table'), th = el('tr');
+    for (const [c, a] of [['Status', ''], ['Until', 'right'], ['Last seen', 'right'], ['Version', ''], ['Wallets', 'right'], ['Code', 'right'], ['', '']]) { const x = el('th', '', c); if (a) x.style.textAlign = a; th.append(x); }
+    const tb = el('tbody'); t.append(th, tb); tw.append(t); card.append(el('div', 'sub', 'People'), tw);
+    if (!S.users.length) { const r = el('tr'), d = el('td', 'empty', 'Nobody yet'); d.colSpan = 7; r.append(d); tb.append(r); }
+    for (const u of S.users) {
+      const r = el('tr'), s = ST[u.st] || [u.st, ''], c1 = el('td'), chip = el('span', 'chip ' + s[1], s[0] + (u.owner ? ' · owner' : '')); c1.append(chip);
+      if (u.why) c1.append(el('span', 'muted', ' ' + ({ device: 'same PC', ip: 'same network', wallet: 'same wallet' }[u.why] || u.why)));
+      const td7 = el('td'), a = el('div', 'acts2'); td7.append(a);
+      for (const [l, x, tt] of [['+30 days', 'add30', 'Give 30 paid days'], [u.st === 'free' && !u.owner ? 'Unfree' : 'Free', 'free', 'Free for good on/off'], ['Free week', 'trial', 'Start a free week now'], ['End', 'end', 'End the subscription now']]) {
+        if (u.owner && x !== 'add30') continue; const b = el('button', 'sec xs', l); b.title = tt; b.onclick = () => { if (x === 'end' && !confirm('End this subscription now?')) return; act({ act: x, id: u.id }); }; a.append(b); }
+      r.append(c1, el('td', 't', u.st === 'free' ? '∞' : dshort(u.until)), el('td', 't', ago(u.last)), el('td', '', u.ver || ''), el('td', 'n', String(u.nw)), el('td', 'n', String(u.code || '')), td7); tb.append(r);
+    }
+    /* payments */
+    const pw = el('div', 'tw'), pt = el('table'), ph = el('tr');
+    for (const [c, a] of [['When', ''], ['Amount', 'right'], ['Days', 'right'], ['From', ''], ['Matched', '']]) { const x = el('th', '', c); if (a) x.style.textAlign = a; ph.append(x); }
+    const pb = el('tbody'); pt.append(ph, pb); pw.append(pt); card.append(el('div', 'sub', 'Payments'), pw);
+    if (!S.pays.length) { const r = el('tr'), d = el('td', 'empty', 'No payments yet'); d.colSpan = 5; r.append(d); pb.append(r); }
+    for (const p of S.pays) { const r = el('tr'), lk = el('a', 'mono', (p.src || '').slice(0, 4) + '…' + (p.src || '').slice(-4)); lk.href = 'https://solscan.io/tx/' + p.sig; lk.target = '_blank'; lk.rel = 'noopener noreferrer'; const fr = el('td'); fr.append(lk);
+      r.append(el('td', 't', new Date(p.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })), el('td', 'n', solf(p.lamports / 1e9)), el('td', 'n', String(p.days || 0)), fr, el('td', '', p.id ? 'yes' : 'no: give days by hand')); pb.append(r); }
+    return card;
+  }
   function draw() {
     const y = scrollY; app.textContent = '';
     const top = el('header', 'top'), ti = el('div', 'in'), img = el('img'); img.src = '/admin/logo.svg'; img.alt = '';
@@ -117,7 +162,7 @@
     ti.append(img, el('span', 'nm', 'HAKI Strike'), el('span', 'tag', 'Admin'), el('span', 'sp'), el('span', 'live', 'Live · ' + new Date(D.now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })), rf, lo);
     top.append(ti); app.append(top);
     const m = el('main'); app.append(m);
-    const hd = el('div', 'head'); hd.append(el('h1', '', 'Overview'), el('p', '', 'Anonymous usage of the extension. No wallets, keys, balances or trades are collected.')); m.append(hd);
+    const hd = el('div', 'head'); hd.append(el('h1', '', 'Overview'), el('p', '', 'Usage of the extension. No keys, balances or trades are collected; wallet addresses only for subscriptions.')); m.append(hd);
 
     const d14 = dayList(D.now, 14), A = Object.fromEntries(D.daily.map(r => [r.day, r.n])), N = Object.fromEntries(D.newDaily.map(r => [r.day, r.n]));
     const act14 = d14.map(d => A[d] || 0), new14 = d14.map(d => N[d] || 0); let cum = D.total - new14.reduce((s, v) => s + v, 0); const tot14 = new14.map(v => (cum += v));
@@ -142,6 +187,7 @@
       breakdown('Chains, 7 days', D.chains, 'chain', { sol: '#14F195', bsc: '#F0B90B', _: ['#6E7487'] }, ch => ch === 'bsc' ? 'BNB Chain' : 'Solana'));
 
     chart(c1);   /* after the side column: the card has its final height */
+    if (D.lic) m.append(subs(D.lic));
     const rc = el('div', 'card'); rc.id = 'reports'; const rh = el('div', 'ch'); rh.append(el('h2', '', 'Reports'), el('span', 'sp'));
     const rs = el('div', 'seg'); for (const [f, l] of [['open', 'Open'], ['solved', 'Solved'], ['ignored', 'Ignored'], ['all', 'All']]) {
       const n = f === 'all' ? D.reports.length : (D.counts[f] || 0), b = el('button', f === RF ? 'on' : '', l); b.append(el('b', '', String(n))); b.onclick = () => { RF = f; draw(); }; rs.append(b); }
