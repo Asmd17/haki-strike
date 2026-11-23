@@ -99,6 +99,7 @@
 
   /* HAKI's font (Medeo Sans, OFL), loaded into the page's font set from our own file so the shadow root can use it */
   (async () => { try { const b2 = await (await fetch(chrome.runtime.getURL('fonts/medeo-latin.woff2'))).arrayBuffer(); const f2 = new FontFace('HakiMedeo', b2, { weight: '100 900' }); await f2.load(); document.fonts.add(f2); } catch (_) {} })();
+  (async () => { try { const b3 = await (await fetch(chrome.runtime.getURL('fonts/inter-latin.woff2'))).arrayBuffer(); const f3 = new FontFace('HakiInter', b3, { weight: '100 900' }); await f3.load(); document.fonts.add(f3); } catch (_) {} })();   /* 3.27.1: Inter, as in the owner's reference */
   (async () => { try { const buf = await (await fetch(chrome.runtime.getURL('fonts/geist-latin.woff2'))).arrayBuffer(); const f = new FontFace('HakiGeist', buf, { weight: '100 900' }); await f.load(); document.fonts.add(f); } catch (_) {} })();
 
   const host = document.createElement('div'); host.id = 'haki-ax'; host.style.cssText = 'all:initial;position:fixed;z-index:2147483646;top:0;left:0;width:0;height:0';
@@ -106,7 +107,7 @@
   R.innerHTML = `<style>
 /* 3.15.0 "Obsidian" (owner 1122 picked it from three mocks, then: smaller, neater, fewer empty places, resizable, Consolidate / Split).
    One stylesheet (the old layers are gone). Grid 4 px; text 11 / 12 / 13, PnL 20; colour only for buy / sell / profit / loss. */
-*{box-sizing:border-box;margin:0;font-family:HakiGeist,Geist,Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box;margin:0;font-family:HakiInter,HakiGeist,Geist,Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
 .num,.n{font-variant-numeric:tabular-nums}
 .p,.pw,.wm{transform-origin:0 0;font-feature-settings:"tnum" 1;text-rendering:optimizeLegibility}
@@ -170,7 +171,7 @@ button.c sub{display:none}
 .rb button.c:hover,.rb button.c:focus-visible{outline:0}
 .rs button.c:hover,.rs button.c:focus-visible{outline:0}
 
-.c kbd{display:none;position:absolute;right:5px;bottom:3px;font:500 8.5px/10px HakiGeist,Geist,system-ui,sans-serif;color:#3F4249}
+.c kbd{display:none;position:absolute;right:5px;bottom:3px;font:500 8.5px/10px HakiInter,HakiGeist,Geist,system-ui,sans-serif;color:#3F4249}
 .p.hk .c kbd{display:block}
 .rail.off button.c{pointer-events:none}
 button.c.busy{overflow:hidden}
@@ -183,15 +184,15 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .set .fast{display:flex;align-items:center;gap:5px}
 .adv{margin-left:auto;font-weight:500}
 .cus{display:none;gap:6px;margin-bottom:8px}.cus.on{display:flex}
-.cus input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 10px;font:13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0}
+.cus input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 10px;font:13px HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0}
 .cus input:focus{border-color:#4A4D54}
 .cus button{width:64px;height:32px;border-radius:8px;background:#37D399;color:#06140D;font-weight:600}
 /* switches */
 .aut{display:flex;align-items:center;gap:6px;cursor:pointer;flex:none}
 .aut input{position:absolute;opacity:0;width:1px;height:1px}
-.sw{position:relative;width:26px;height:15px;border-radius:8px;background:#26282D;transition:background-color .15s;flex:none}
-.sw:after{content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#6B7079;transition:transform .15s,background-color .15s}
-.aut input:checked+.sw:after{transform:translateX(11px);background:#fff}
+.sw{position:relative;background:#26282D;transition:background-color .15s;flex:none}
+.sw:after{content:"";position:absolute;left:2px;top:2px;border-radius:50%;background:#6B7079;transition:transform .15s,background-color .15s}
+.aut input:checked+.sw:after{background:#fff}
 .aut input:focus-visible+.sw{outline:2px solid rgba(255,255,255,.5);outline-offset:1px}
 /* Auto sell / Callout: one quiet row each, open below */
 
@@ -207,14 +208,14 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .af{display:flex;align-items:center;gap:4px;color:#6B7079;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ar .af:nth-child(2){width:100px;justify-content:flex-end}.af:last-child{margin-left:auto}
 .aun{display:inline-block;width:26px;text-align:center}
-.ain{width:44px;height:24px;border-radius:6px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 6px;font:12px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:right;outline:0}
+.ain{width:44px;height:24px;border-radius:6px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 6px;font:12px HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:right;outline:0}
 .ain:focus{border-color:#4A4D54}.ain.bad{border-color:#F0596B}.ain.mc{width:50px}
-.aby{all:unset;box-sizing:border-box;height:20px;width:26px;border-radius:5px;border:1px solid #2A2C31;display:inline-flex;align-items:center;justify-content:center;color:#7C818A;font:600 10px HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
+.aby{all:unset;box-sizing:border-box;height:20px;width:26px;border-radius:5px;border:1px solid #2A2C31;display:inline-flex;align-items:center;justify-content:center;color:#7C818A;font:600 10px HakiInter,HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
 .aby:hover{color:#EDEEF0}.aby.on{color:#EDEEF0;background:#1C1D21}
 .ar.off .af{opacity:.45}
 .an{display:none}
 .crow{display:flex;gap:6px}
-.crow input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 10px;font:12px HakiGeist,Geist,system-ui,sans-serif;outline:0}
+.crow input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid #24262B;background:#0D0E10;color:#EDEEF0;padding:0 10px;font:12px HakiInter,HakiGeist,Geist,system-ui,sans-serif;outline:0}
 .crow input:focus{border-color:#4A4D54}
 .cnx{width:32px;height:32px;border-radius:8px;background:#1C1D21;color:#8A8F98;display:grid;place-items:center;flex:none}.cnx:hover{color:#EDEEF0}.cnx[hidden]{display:none}
 .cpost{width:64px;height:32px;border-radius:8px;background:#EDEEF0;color:#111215;font-weight:600;flex:none}.cpost:disabled{opacity:.5;cursor:default}
@@ -229,7 +230,7 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 .snp{height:22px;margin-left:6px;padding:0 8px;border-radius:7px;background:#1E2029;box-shadow:inset 0 0 0 1px #2A2D39;color:#C9CCD1;font-size:11.5px;font-weight:600}
 .snp:hover{color:#fff;background:#252834}
 /* 3.25.0 (owner: "the pop-up under the panel is not harmonious"): a status bar under the panel, exactly its width */
-.msg{box-sizing:border-box;height:36px;gap:10px;padding:0 8px 0 10px;border-radius:10px;color:#C9CCD1;font:500 12.5px/16px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;transform:translateY(-6px);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}
+.msg{box-sizing:border-box;height:36px;gap:10px;padding:0 8px 0 10px;border-radius:10px;color:#C9CCD1;font:500 12.5px/16px HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;transform:translateY(-6px);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1)}
 .msg.on{transform:none}
 .msg:before{width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:none;border:2px solid #3A3E4C;border-top-color:#C9CCD1;animation:hkspin .8s linear infinite}
 .msg.ok:before,.msg.bad:before{border:0;animation:none;background-repeat:no-repeat;background-position:center;background-size:16px}
@@ -241,13 +242,13 @@ button.c.busy:after{content:"";position:absolute;left:-40%;bottom:0;width:40%;he
 
 @keyframes hkspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.msg:before{animation:none}.msg{transition:opacity .16s ease}}.snp.on{color:#F5A524;box-shadow:inset 0 0 0 1px rgba(245,165,36,.5)}   /* 3.24.0: anti-sandwich slippage in use */
-.msg .rpt{flex:none;height:20px;margin-right:-4px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#EDEEF0;font:600 11px/20px HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
+.msg .rpt{flex:none;height:20px;margin-right:-4px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:#EDEEF0;font:600 11px/20px HakiInter,HakiGeist,Geist,system-ui,sans-serif;cursor:pointer}
 .msg .rpt:hover{background:rgba(255,255,255,.12)}
 .updb{display:none;width:calc(100% - 24px);height:28px;margin:0 12px 10px;border-radius:8px;background:#1C1D21;color:#EDEEF0;font-weight:600}.updb.on{display:block}.updb:hover{background:#26282D}
 .p>.side:last-of-type,.sc{margin-bottom:0}
 /* edit mode: the 8 amounts as fields */
 .rail .cw{position:relative;min-width:0}
-input.c{width:100%;min-width:0;color:#EDEEF0;font:500 13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0;cursor:text}
+input.c{width:100%;min-width:0;color:#EDEEF0;font:500 13px HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;outline:0;cursor:text}
 input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .rail .cw i{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-style:normal;font-size:10px;color:#5F646D;pointer-events:none}
 /* resize: drag the corner (bigger / smaller, saved) */
@@ -327,7 +328,7 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .fld{display:flex;flex-direction:column;gap:4px;cursor:text;min-width:0}
 .fi{display:flex;align-items:center;height:36px;border-radius:8px;background:#0D0E10;border:1px solid #24262B;padding:0 8px}
 .fi:focus-within{border-color:#6B7079}.fi.bad{border-color:#F0596B}
-.fi input{flex:1;width:0;min-width:0;background:none;border:0;outline:0;color:#EDEEF0;font:600 13px HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center}
+.fi input{flex:1;width:0;min-width:0;background:none;border:0;outline:0;color:#EDEEF0;font:600 13px HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:center}
 .fi i{font-style:normal;color:#5F646D;font-size:11px;margin-left:4px}
 .fl{font-size:11px;color:#6B7079;text-align:center}
 .pwn{margin-top:10px;font-size:11.5px;line-height:16px;color:#7C818A}.pwn b{color:#EDEEF0;font-weight:500}.pwn .w{color:#F5A524}
@@ -338,11 +339,11 @@ input.c:focus{border:1px solid #6B7079}input.c.bad{border-color:#F0596B}
 .shf{width:818px;height:782px;border:0;background:transparent;color-scheme:dark;transform-origin:center}
 /* ===== 3.18.2 (owner: "a bit dark, lighter"): surfaces one step lighter. 3.18.1 (owner: "like Axiom, but not stolen"): Axiom's proven layout, HAKI's own look. HAKI's font (Medeo Sans), HAKI blue from the
    colours: neutral graphite, HAKI red once (the chosen preset; the logo's eye), keys with a coloured base line instead of pills, a wide PnL cell leading the stats bar ===== */
-.p{width:314px;font-family:HakiGeist,Geist,system-ui,sans-serif;font-size:13px}
+.p{width:314px;font-family:HakiInter,HakiGeist,Geist,system-ui,sans-serif;font-size:13px}
 /* 3.19.1 (owner: "the text is not sharp"): Geist for every UI text (Medeo is a display face: soft at 10-13 px); Medeo only for the Buy / Sell titles */
-.lb{font-family:HakiMedeo,HakiGeist,Geist,system-ui,sans-serif}
+.lb{font-family:HakiInter,HakiGeist,Geist,system-ui,sans-serif}
 .p button,.p input{font-family:inherit}
-.num,.n,.rt,.set b,.hero .v2{font-family:HakiGeist,Geist,system-ui,sans-serif}
+.num,.n,.rt,.set b,.hero .v2{font-family:HakiInter,HakiGeist,Geist,system-ui,sans-serif}
 
 
 .tabs{align-self:center;gap:0}
@@ -376,7 +377,7 @@ button.c,.rs button.c{letter-spacing:0}
 
 .rb button.c:hover,.rb button.c:focus-visible{background:#16342A;box-shadow:inset 0 0 0 1px #22A673,inset 0 -2px 0 #3DDC97;color:#5BF0B2}
 .rs button.c:hover,.rs button.c:focus-visible{background:#3A1A22;box-shadow:inset 0 0 0 1px #C2384F,inset 0 -2px 0 #FF5C78;color:#FF7A92}
-button.c small{display:block;font-family:HakiGeist,Geist,system-ui,sans-serif}
+button.c small{display:block;font-family:HakiInter,HakiGeist,Geist,system-ui,sans-serif}
 .p.hk .rail .c kbd{display:block;right:auto;bottom:auto;letter-spacing:0}   /* 3.20.5: your hotkey letter */
 .p.hk .rail.off .c kbd{display:none}
 .rail.off button.c{color:#474B5C;background:#191B23;box-shadow:inset 0 0 0 1px #242733}
@@ -385,9 +386,9 @@ button.c small{display:block;font-family:HakiGeist,Geist,system-ui,sans-serif}
 input.c{height:40px;border-radius:10px;text-align:center;padding:0 18px 0 8px;background:#12141B;border:1px dashed #474B5C}
 .set{color:#8A91A5}
 .set>span,.set .fast{display:flex;align-items:center;gap:5px}
-.set svg{color:#5A6178;flex:none}
+.set svg{flex:none}
 .set b{font-weight:500}
-.set .fast svg{color:#3DDC97}.set .fast.no svg{color:#5A6178}
+.set .fast.no svg{color:#5A6178}
 .adv{color:#C9CDD8}.adv:hover{color:#fff}
 
 .sa,.sc{margin:4px 12px 0;border-top:1px solid #2A2D39}
@@ -404,9 +405,9 @@ input.c{height:40px;border-radius:10px;text-align:center;padding:0 18px 0 8px;ba
 .hero .cp .v2{line-height:20px}
 .hero .hv .un,.hero .v2 .un{display:inline-flex!important}
 .hero .un .sol{width:14px;height:14px}
-.hero .k2{font-size:11px;line-height:13px;font-weight:500;letter-spacing:0}
+.hero .k2{line-height:13px;font-weight:500;letter-spacing:0}
 .hero .pn{font-size:inherit;line-height:inherit;letter-spacing:-.01em;font-weight:600;color:#fff}
-.hero .k2 .pp{font-size:11px;font-weight:600;margin-left:3px;color:#8A91A5}
+.hero .k2 .pp{font-weight:600;margin-left:3px;color:#8A91A5}
 .hero .cp{cursor:pointer}
 /* 3.20.1 (owner: Share squeezed at the edge, an empty strip under the stats): Share sits next to the PnL label, the grabber lies on the
    panel's bottom edge instead of a row of its own */
@@ -416,7 +417,7 @@ input.c{height:40px;border-radius:10px;text-align:center;padding:0 18px 0 8px;ba
 .hero{border-radius:0 0 14px 14px}
 .xt{position:absolute;left:50%;bottom:0;width:64px;height:10px;margin-left:-32px;z-index:4}.xt:after{top:auto;bottom:3px;height:3px;width:28px;margin-left:-14px}
 .xt:after{background:#3A3E4C}
-.wm,.pw{background:#161821;box-shadow:0 0 0 1px #2A2D39,0 24px 56px -12px rgba(0,0,0,.9);font-family:HakiGeist,Geist,system-ui,sans-serif}
+.wm,.pw{background:#161821;box-shadow:0 0 0 1px #2A2D39,0 24px 56px -12px rgba(0,0,0,.9);font-family:HakiInter,HakiGeist,Geist,system-ui,sans-serif}
 .wr input:checked+.ck{background:#fff}.wr input:checked+.ck:after{border-color:#161821}
 .msg{background:#1E2029;box-shadow:0 0 0 1px #343848,0 12px 28px -8px rgba(0,0,0,.8)}
 /* 3.20.0 (owner: "smooth"): the panel is its own layer (its updates never re-layout the page), menus fade in, keys answer at once */
@@ -435,54 +436,54 @@ button.c:active{transform:translateY(1px) scale(.985)}
 @media (prefers-reduced-motion:reduce){button.c{transition:none}button.c:active{transform:none}button.c.busy:after{animation:none;left:0;width:100%;opacity:.5}}
 /* 3.27.0 glass look (owner reference): near-black panel, outlined header groups, glass keys with a coloured lower edge, lighter weights */
 .p{border-radius:14px;background:linear-gradient(180deg,#15181D 0,#0C0E13 34%,#090B0F 100%);box-shadow:0 0 0 1px #2B2D33,0 24px 60px -18px rgba(0,0,0,.9)}
-.tb{height:38px;padding:0 8px 0 11px;gap:4px;background:transparent;border-bottom:1px solid rgba(255,255,255,.055)}
-.tb .mk{width:20px;height:20px;margin-right:6px}
+.tb{gap:4px;background:transparent;border-bottom:1px solid rgba(255,255,255,.055)}
+
 .tb .sp{display:none}
 .tb .ib{width:26px;height:26px}
-.tb .edt{margin-left:auto;margin-right:6px}
+.tb .edt{margin-left:auto}
 .tb .mn{width:18px}
-.tb .kbt{width:33px;height:21px;border-radius:7px;background:rgba(255,255,255,.015);box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);color:#C3C7D2}
-.tabs{padding:2px;margin:0 0 0 3px;border-radius:8px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
-.tabs button{height:19px;padding:0 7px;border-radius:6px;font-size:11.5px;font-weight:500;color:#A3A7B3}
+.tb .kbt{height:21px;border-radius:7px;background:rgba(255,255,255,.015);box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);color:#C3C7D2}
+.tabs{padding:2px;border-radius:8px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.tabs button{height:19px;border-radius:6px;font-weight:500;color:#A3A7B3}
 .tabs button.on{background:#D42443;color:#fff;box-shadow:none}
 .tb .edt,.tb .cfg{color:#B5BAC6}
-.wal{height:21px;padding:0 7px;margin:0;gap:5px;border-radius:7px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);font-weight:500;font-size:11px}
+.wal{height:21px;margin:0;gap:5px;border-radius:7px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.11);font-weight:500}
 .wal svg{width:13px;height:13px}
 .side{padding:6px 12px 0}
 .hd{height:22px;margin-bottom:5px}
-.lb{font-size:13px;font-weight:600;letter-spacing:0}
-.ccy span{height:19px;padding:0 8px 0 4px;border-radius:10px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-size:10.5px;font-weight:500;color:#C3C7D2}
+.lb{font-weight:600;letter-spacing:0}
+.ccy span{height:19px;padding:0 8px 0 4px;border-radius:10px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-weight:500;color:#C3C7D2}
 .ccy .sol{width:12px;height:12px}
 .smode{height:19px;border-radius:6px;background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font-size:10.5px;font-weight:500}
-.rt{font-size:10.5px}
-.rt b{font-size:11.5px;font-weight:500}
-.rt b.bal{font-size:12px;font-weight:600}
+
+
+.rt b.bal{font-weight:600}
 .rt .sol{width:12px;height:12px}
-.init{font-size:10.5px;font-weight:500;color:#F0506A}
+.init{font-weight:500;color:#F0506A}
 .rail{gap:8px;margin-bottom:2px}
-button.c,.rs button.c{height:33px;border-radius:8px;font-size:13px;font-weight:500;background:linear-gradient(180deg,rgba(255,255,255,.05) 0,rgba(255,255,255,.03) 60%,color-mix(in srgb,var(--k) 8%,transparent) 100%)}
+button.c,.rs button.c{height:33px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.05) 0,rgba(255,255,255,.03) 60%,color-mix(in srgb,var(--k) 8%,transparent) 100%)}
 .rb button.c{color:#3DDC97;--k:#2FD28A}
 .rs button.c{color:#F0506A;--k:#E23A55}
 .rs button.c span{line-height:14px}
-button.c small{font-size:10px;line-height:11px;color:#A5AEBF;font-weight:400}
+button.c small{line-height:11px;color:#A5AEBF}
 .rb button.c:hover{background:color-mix(in srgb,#2FD28A 12%,transparent);box-shadow:inset 0 0 0 1px rgba(47,210,138,.45),inset 0 -1.5px 0 #2FD28A,0 6px 14px -6px #2FD28A;color:#5BF0B2}
 .rs button.c:hover{background:color-mix(in srgb,#E23A55 12%,transparent);box-shadow:inset 0 0 0 1px rgba(226,58,85,.45),inset 0 -1.5px 0 #E23A55,0 6px 14px -6px #E23A55;color:#FF7A92}
-.p.hk .rail .c kbd{left:7px;top:5px;font:500 8px/9px HakiGeist,Geist,system-ui,sans-serif;color:#6E7180}
-.set{height:24px;font-size:10.5px;gap:12px}
+.p.hk .rail .c kbd{left:7px;top:5px;font:500 8px/9px HakiInter,HakiGeist,Geist,system-ui,sans-serif;color:#6E7180}
+.set{height:24px;gap:12px}
 
 .set b{color:#DADDE5}
 .sa{margin-top:2px;border-top:1px solid rgba(255,255,255,.06);padding-top:0}
 .sc{border-top:1px solid rgba(255,255,255,.06);padding-top:0}
 .sa .hd,.sc .hd{height:21px;margin:0}
-.atg,.ctg{font-size:11px;font-weight:500;color:#E3E5EB}
+.atg,.ctg{font-weight:500;color:#E3E5EB}
 .atg svg,.ctg svg{color:#7A7F8C}
-.aut{font-size:10.5px;font-weight:400;color:#AEB2BC}
+.aut{font-weight:400;color:#AEB2BC}
 .hero,.p.nopos .hero{margin-top:3px;background:#0D0F14;border-top:1px solid rgba(255,255,255,.07);border-radius:0 0 14px 14px}
 .hero .fc{height:44px;padding:0 12px}
 .hero .fc+.fc{box-shadow:inset 1px 0 0 rgba(255,255,255,.07)}
-.hero .v2{font-size:11px;font-weight:500}
-.hero .cp .v2{font-size:14.5px;font-weight:600}
-.hero .k2,.hero .k2 .pp{font-size:10px}
+.hero .v2{font-weight:500}
+
+
 .hero .k2{color:#8A8F9C}
 .sa,.sc{padding:0}
 .set b.asl{color:#3DDC97}
@@ -490,7 +491,50 @@ button.c small{font-size:10px;line-height:11px;color:#A5AEBF;font-weight:400}
 .hero .fc:not(.cp){align-items:center}
 .xt,.rh{opacity:0;transition:opacity .15s}
 .p:hover .xt,.p:hover .rh{opacity:1}
-button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.085),inset 0 -1.5px 0 color-mix(in srgb,var(--k) 45%,transparent),0 4px 8px -7px var(--k)}
+
+/* 3.27.1 closer to the owner reference: Inter, reference text sizes, header positions, smaller switches */
+.side .num,.side .n,.hero .num,.hero .n,button.c{font-variant-numeric:normal}
+.tabs button{font-size:10.5px}
+.lb{font-size:12px}
+.ccy span{font-size:10px}
+
+button.c,.rs button.c{font-size:12px;font-weight:600}
+button.c small{font-weight:500}
+.set{font-size:9px}
+.rt{font-size:9px}.rt b{font-size:10px;font-weight:600}
+.init{font-size:9px}
+.atg,.ctg{font-size:9.5px}
+.aut{font-size:10px}
+.hero .k2,.hero .k2 .pp{font-size:8.5px}
+.hero .v2{font-size:10px}
+.hero .cp .v2{font-size:12.5px}
+.rb button.c{font-size:11px}
+
+
+.rt b.bal{font-size:10.5px}
+.hero .k2{font-size:8px}.hero .k2 .pp{font-size:9px}
+.hero .fc:not(.cp) .v2,.hero .fc:not(.cp) .v2 *{font-weight:500}
+.tb{padding:0 6px 0 16px}
+.tb .mk{width:18px;height:18px;margin-right:10px}
+.tb .kbt{width:25px}
+.tabs{margin:0}
+.tb .edt{margin-right:2px}
+.wal{padding:0 6px;margin-left:5px;font-size:10px}
+.tb .mn{margin-left:-2px}
+.set svg{color:#C3C7D2}
+.set .fast svg{color:#3DDC97}
+.tb{height:39px}
+.tabs button{padding:0 7.5px}
+
+button.c small{font-size:8px}
+.rb button.c{padding-top:3px}
+button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -1.5px 0 color-mix(in srgb,var(--k) 50%,transparent),0 3px 6px -5px var(--k)}
+.sw{width:21px;height:12px;border-radius:6px}
+.sw:after{width:8px;height:8px}
+.aut input:checked+.sw:after{transform:translateX(9px)}
+.rs button.c{font-size:10.5px}
+.hero .cp .v2{font-weight:700}
+.hero .fc:not(.cp) .k2{width:auto;justify-content:center}   /* label and number on one axis (owner) */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
 <linearGradient id="hkSpf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37D399" stop-opacity=".18"/><stop offset="1" stop-color="#37D399" stop-opacity="0"/></linearGradient>
