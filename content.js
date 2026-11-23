@@ -461,7 +461,7 @@ button.c:active{transform:translateY(1px) scale(.985)}
 .rt .sol{width:12px;height:12px}
 .init{font-weight:500;color:#F0506A}
 .rail{gap:8px;margin-bottom:2px}
-button.c,.rs button.c{height:33px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.05) 0,rgba(255,255,255,.03) 60%,color-mix(in srgb,var(--k) 8%,transparent) 100%)}
+button.c,.rs button.c{height:var(--kh,33px);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.05) 0,rgba(255,255,255,.03) 60%,color-mix(in srgb,var(--k) 8%,transparent) 100%)}
 .rb button.c{color:#3DDC97;--k:#2FD28A}
 .rs button.c{color:#F0506A;--k:#E23A55}
 .rs button.c span{line-height:14px}
@@ -535,6 +535,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
 .rs button.c{font-size:10.5px}
 .hero .cp .v2{font-weight:700}
 .hero .fc:not(.cp) .k2{width:auto;justify-content:center}   /* label and number on one axis (owner) */
+.hero .fc{gap:0}.hero .k2{line-height:11px}.hero .fc:not(.cp) .v2{justify-content:center;text-align:center}   /* 3.27.2: label sits close above the number, as in the reference */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
 <linearGradient id="hkSpf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37D399" stop-opacity=".18"/><stop offset="1" stop-color="#37D399" stop-opacity="0"/></linearGradient>
@@ -1254,7 +1255,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     xt.addEventListener('pointermove', e => { if (!d) return; const dy = (e.clientY - d.y) / Z; if (dy > 18) { d.moved = true; set(true); d.y = e.clientY; } else if (dy < -18) { d.moved = true; set(false); d.y = e.clientY; } });
     xt.addEventListener('pointerup', () => { if (!d) return; if (!d.moved) set(!EXT); d = null; });
   })();
-  const PWMIN = 280, PWMAX = 560, KHMIN = 32, KHMAX = 72; let KH = 40;
+  const PWMIN = 280, PWMAX = 560, KHMIN = 28, KHMAX = 72; let KH = 33;   /* 3.27.2: keys 33 by default (reference look); the edges still make them taller */
   (function resize() {
     /* 3.20.2 (owner: "pull right = it gets wider, the same up and down"): every edge and corner changes the SIZE, it never scales.
        Left / right = width (the keys widen), top / bottom = height (the keys get taller); the text keeps its size; the opposite side stays put.
