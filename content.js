@@ -538,13 +538,29 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
 .hero .fc{gap:0}.hero .k2{line-height:11px}
 .hero .fc .k2{height:14px;align-items:center}.hero .fc .v2{height:22px;align-items:center}.hero .shr{height:14px}
 .hero .k2,.hero .k2 .pp{font-size:10.5px}.hero .k2{color:#9499A6}.hero .fc:not(.cp) .v2,.hero .fc:not(.cp) .v2 *{font-size:13px;font-weight:600}.hero .cp .v2{font-size:16px}.hero .cp .k2{position:relative;top:1px}.hero .cp .v2{position:relative;top:-1px}   /* 3.27.3 (owner: footer text too small to read) */   /* 3.27.3: every cell has the label line and the number line at the same heights, so the four cells read as two straight rows */.hero .fc:not(.cp) .v2{justify-content:center;text-align:center}   /* 3.27.2: label sits close above the number, as in the reference */
+/* 3.27.5: wallet amounts in two columns (numbers right-aligned, units in one column); address copies on click; hotkeys on / off readable; crisp logo */
+.wr .ws{display:grid;grid-template-columns:auto 34px;column-gap:5px;align-items:center;justify-items:start}
+.wr .ws .wv{justify-self:end}
+.wr .ws b.wu{display:flex;align-items:center}
+.wr .ws small.wv{color:#C9CCD1}
+.wr .ws.lk{display:block}
+.wmf button{padding:0 3px;gap:4px;font-size:11.5px}.wmf{gap:2px}.wmf .tot{min-width:0;flex:none}.wmf .tot span{margin-right:0}   /* the bottom bar fits again, so the total lines up with the rows */
+.wmtot{display:inline-grid!important;grid-template-columns:auto 34px;column-gap:5px;align-items:center;justify-items:start}   /* total: number and coin mark in the same columns as the rows */
+.wr .wcp{cursor:copy;border-radius:4px;transition:color .12s}
+.wr .wcp:hover{color:#C9CDD8;text-decoration:underline;text-underline-offset:2px}
+.wr .wcp.cpd{color:#3DDC97}
+.tb .kbt{color:#6E7380}
+.tb .kbt.acc{color:#3DDC97;background:rgba(47,210,138,.14);box-shadow:inset 0 0 0 1px rgba(47,210,138,.6)}
+.tb .kbt:hover{color:#E3E5EB}
+.tb .kbt.acc:hover{color:#5BF0B2}
+.tb{height:41px}   /* 40 inside the 1px line: the 18px logo sits on whole pixels */
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="hkSg" x1="6" y1="26" x2="26" y2="6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
 <linearGradient id="hkSpf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#37D399" stop-opacity=".18"/><stop offset="1" stop-color="#37D399" stop-opacity="0"/></linearGradient>
 <linearGradient id="hkSpfD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0596B" stop-opacity=".16"/><stop offset="1" stop-color="#F0596B" stop-opacity="0"/></linearGradient></defs></svg>
 <div class="p" hidden>
  <div class="tb">
-  <img class="mk" src="${chrome.runtime.getURL('icons/logo.svg')}" alt="HAKI" draggable="false">
+  <img class="mk" src="${chrome.runtime.getURL('icons/mark-18.png')}" srcset="${[[18, 1], [23, 1.25], [27, 1.5], [36, 2], [54, 3]].map(([n, x]) => chrome.runtime.getURL('icons/mark-' + n + '.png') + ' ' + x + 'x').join(', ')}" width="18" height="18" alt="HAKI" draggable="false">
   <button class="ib kbt" title="Hotkeys: hold Space, then Q W E R to buy, A S D F to sell" aria-label="Hotkeys">${I.kb}</button>
   <div class="tabs" role="tablist" aria-label="Presets"><button data-p="0">${I.p[0]}P1</button><button data-p="1">${I.p[1]}P2</button><button data-p="2">${I.p[2]}P3</button></div>
   <button class="ib edt" title="Edit the buy and sell amounts" aria-label="Edit amounts">${I.pen}</button>
@@ -1030,8 +1046,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (BSCM()) {   /* 3.14.2 (owner: "Solana wallets on BNB"): on a BSC coin the menu is the BSC wallet */
       const w = await send('bscWallet'); wMode = null; $('.wmx').hidden = true; WM.classList.remove('pick');
       $('.wmt').textContent = w && !w.none ? '1 of 1' : '0'; $('.wmtot').innerHTML = w && w.bnb != null ? wsol(w.bnb) + BNBI : '–';
-      $('.wml').innerHTML = w && !w.none ? '<label class="wr"><input type="checkbox" checked disabled><span class="ck"></span><span class="wl"><b>' + ESC(w.label || 'BSC wallet') + '</b><i>' + ESC(short(w.addr)) + '</i></span>'
-        + (w.open ? '<span class="ws num"><b>' + (w.bnb == null ? '–' : wsol(+w.bnb)) + BNBI + '</b></span>' : '<span class="ws lk">locked</span>') + '</label>' : '<div class="wmh">No BSC wallet yet</div>';
+      $('.wml').innerHTML = w && !w.none ? '<label class="wr"><input type="checkbox" checked disabled><span class="ck"></span><span class="wl"><b>' + ESC(w.label || 'BSC wallet') + '</b><i class="wcp" data-cp="' + ESC(w.addr) + '" title="Copy address">' + ESC(short(w.addr)) + '</i></span>'
+        + (w.open ? '<span class="ws num"><b class="wv">' + (w.bnb == null ? '–' : wsol(+w.bnb)) + '</b><b class="wu">' + BNBI + '</b></span>' : '<span class="ws lk">locked</span>') + '</label>' : '<div class="wmh">No BSC wallet yet</div>';
       return;
     }
     const r = await send('wallets', { a: A, isMint: isMintPage() }); if (r.err) { status(r.err, 'bad'); return; }
@@ -1042,11 +1058,19 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     WM.classList.toggle('pick', pick);
     $('.wmt').textContent = on.length + ' of ' + L.length;
     $('.wmtot').innerHTML = wsol(L.reduce((s, w) => s + (+w.sol || 0), 0)) + MARK();
-    $('.wml').innerHTML = L.length ? L.map(w => '<label class="wr' + (w.sel ? '' : ' off') + (pick && w.pub === wTgt ? ' tgt' : '') + '" data-w="' + ESC(w.pub) + '"><input type="checkbox" data-pub="' + ESC(w.pub) + '"' + (w.sel ? ' checked' : '') + (pick ? ' disabled' : '') + '><span class="ck"></span><i class="rd"></i><span class="wl"><b>' + ESC(w.label) + '</b><i>' + ESC(short(w.pub)) + '</i></span>'
-      + (w.open ? '<span class="ws num"><b>' + wsol(w.sol) + MARK() + '</b>' + (w.tok != null ? '<small><em>' + ESC(w.tok > 0 ? fmt(w.tok) : '0') + '</em> ' + ESC(w.sym || 'held') + '</small>' : '') + '</span>' : '<span class="ws lk">locked</span>') + '</label>').join('') : '<div class="wmh">No wallet yet</div>';
+    $('.wml').innerHTML = L.length ? L.map(w => '<label class="wr' + (w.sel ? '' : ' off') + (pick && w.pub === wTgt ? ' tgt' : '') + '" data-w="' + ESC(w.pub) + '"><input type="checkbox" data-pub="' + ESC(w.pub) + '"' + (w.sel ? ' checked' : '') + (pick ? ' disabled' : '') + '><span class="ck"></span><i class="rd"></i><span class="wl"><b>' + ESC(w.label) + '</b><i class="wcp" data-cp="' + ESC(w.pub) + '" title="Copy address">' + ESC(short(w.pub)) + '</i></span>'
+      + (w.open ? '<span class="ws num"><b class="wv">' + wsol(w.sol) + '</b><b class="wu">' + MARK() + '</b>' + (w.tok != null ? '<small class="wv">' + ESC(w.tok > 0 ? fmt(w.tok) : '0') + '</small><small class="wu">' + ESC(w.sym || 'held') + '</small>' : '') + '</span>' : '<span class="ws lk">locked</span>') + '</label>').join('') : '<div class="wmh">No wallet yet</div>';
     WM.querySelectorAll('input[data-pub]').forEach(x => { x.onchange = wmSel; });
     if (pick) WM.querySelectorAll('.wr').forEach(row => { row.onclick = e => { e.preventDefault(); wTgt = row.dataset.w; wmRender(); }; });
     wmBar();
+  }
+  /* 3.27.5 (owner): click a wallet address to copy it; the row's checkbox is not touched */
+  WM.addEventListener('click', e => { const t = e.target.closest && e.target.closest('.wcp'); if (!t) return; e.preventDefault(); e.stopPropagation(); hkCopy(t.dataset.cp, t); }, true);
+  async function hkCopy(txt, el) {
+    let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch (_) {
+      try { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (_) {} }
+    if (el) { el.classList.add('cpd'); setTimeout(() => el.classList.remove('cpd'), 1200); }
+    status(ok ? 'Address copied' : 'Could not copy the address', ok ? 'ok' : 'bad');
   }
   async function wmSel() {
     const pubs = [...WM.querySelectorAll('input[data-pub]:checked')].map(y => y.dataset.pub);
@@ -1241,6 +1265,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   function place(x, y) {
     const h = (P.offsetHeight || 360) * Z, w = (P.offsetWidth || 322) * Z;
     x = Math.min(Math.max(8, x), innerWidth - w - 8); y = Math.min(Math.max(8, y), innerHeight - h - 8);
+    { const dp = devicePixelRatio || 1; x = Math.round(x * dp) / dp; y = Math.round(y * dp) / dp; }   /* 3.27.5: whole screen pixels, so the logo and hairlines stay sharp */
     P.style.left = x / Z + 'px'; P.style.top = y / Z + 'px'; if (S.classList.contains('on')) requestAnimationFrame(toastAt); return [x, y];
   }
   (function drag() {
