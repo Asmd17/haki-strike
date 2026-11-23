@@ -198,7 +198,11 @@ const SOLX = (() => {
   /* 3.8.0 (owner 1117, 99fes..pump "no route"): a pump.fun curve quoted in another meme coin (GTAVI). Jupiter has SOL -> GTAVI and GTAVI ->
      coin but will not chain them through a meme coin. We put both routes in one transaction: all or nothing. The second leg spends a fixed
      amount, 98 % of what the first is quoted to give (the first leg's output moves with other trades in the same block); the ~2 % rest stays
-     in the wallet as the quote coin. A first leg that gives less than that fails the whole trade (nothing spent but the fee) and it is retried. */
+     in the wallet as the quote coin. A first leg that gives less than that fails the whole trade (nothing spent but the fee) and it is retried.
+     3.29.14 (owner 1123, DnbQ..pump quoted in an xStock: "sometimes my sells do not go through"): on a fast coin the first leg often gave
+     2-4 % less than its quote, the second leg asked for 98 % and the whole sell failed on chain (Jupiter 0x1788, InsufficientFunds), whatever
+     the slippage was. The second leg is now Jupiter's token-ledger route: the quote coin balance is noted just before the first leg and
+     the second leg spends exactly what the first one gave, more or less. The slippage you set is the only limit; no change is left over. */
   const LEG_KEEP = 0.98, LEG_ACC = 40,   /* two routes share one transaction's account room */ NOROUTE = /No routes found|NO_ROUTES_FOUND|COULD_NOT_FIND_ANY_ROUTE/i;
   /* the SOL <-> quote-coin leg: its best pool may need many accounts (a DLMM ~64) and both routes share 1232 bytes, so it is quoted at a few
      account caps at once, best output first; the coin leg (its pump.fun curve / pool) fits in 40 */
@@ -218,9 +222,9 @@ const SOLX = (() => {
     if (!pg) return 0n; const [a] = await accs([await ata(pub, pg, qm)], url); return a && a.data.length >= 72 ? u64(a.data, 64) : 0n;
   }
   async function viaQuote(side, m, x, slipBps, qm, o, pub, url, soft) {
-    const heldP = pub && !STABLE.has(qm) ? quoteHeld(pub, qm, url).catch(() => 0n) : Promise.resolve(0n);
+    const heldP = Promise.resolve(0n);   /* 3.29.14: the ledger route spends what the first leg gives, not a fixed amount: no change to add */
     let held = 0n;
-    const keep = q => { const out = Number(q.outAmount), v = BigInt(Math.floor(out * LEG_KEEP)), cap = BigInt(Math.floor(out * 0.05)); if (v <= 0n) throw new Error('no route: the quote coin leg gives nothing'); return (v + (held < cap ? held : cap)).toString(); };
+    const keep = q => { const v = BigInt(q.outAmount); if (v <= 0n) throw new Error('no route: the quote coin leg gives nothing'); return v.toString(); };   /* 3.29.14: quoted for all of it */
     const pairs = [];   /* [q1, q2] in order of preference */
     let fullP = null;   /* 3.29.8: the second leg with no account limit (what two separate transactions get) */
     if (side === 'buy') { const [L, h] = await Promise.all([solLegs(WSOL, qm, String(x), slipBps), heldP]); held = h; for (const q1 of L) pairs.push([q1, null]); fullP = quote(qm, m, keep(L[0]), slipBps).catch(() => null); }
@@ -239,7 +243,7 @@ const SOLX = (() => {
     if (ok) {
       const { q1, q2, b } = ok;
       /* what trade() reads: in = SOL / tokens actually turned into the coin / SOL, out = what the second leg gives, impacts added up */
-      const q = { inAmount: side === 'buy' ? String(Math.round(Number(q1.inAmount) * LEG_KEEP)) : q1.inAmount, outAmount: q2.outAmount,
+      const q = { inAmount: q1.inAmount, outAmount: q2.outAmount,
         priceImpactPct: String((+q1.priceImpactPct || 0) + (+q2.priceImpactPct || 0)), routePlan: [...(q1.routePlan || []), ...(q2.routePlan || [])], legs: 2 };
       return { q, msg: b.msg, tip: b.tip, t: Date.now() };
     }
@@ -295,8 +299,27 @@ const SOLX = (() => {
     const hold = { p }; PREP.set(k, hold);
     try { const r = await p; if (PREP.get(k) === hold) PREP.set(k, r); PMISS.delete(mk); return r; } catch (e) { if (PREP.get(k) === hold) PREP.delete(k); PMISS.set(mk, 'pre-build failed: ' + String(e.message || e).slice(0, 50)); throw e; }
   }
-  /* one trade: {side, a, sol | pct, slip, tip, prio, maxSol, live, isMint, have}; seed / pub = the unlocked wallet */
+  /* 3.29.14 (owner 1123: "sometimes my sells do not go through"; chain, 3 days: 7 sells were sent while the previous sell of the same coin
+     was still landing, sized from the balance before it, and failed with nothing left to sell - 0x1788 / pump 6023). A sell now waits for
+     the sells of that coin still on the wire (up to ~6 s), then reads the balance afresh and is sized from what is really left. */
+  const FLY = new Map();   /* wallet|mint -> [{sig, t}] sells sent and not yet seen landed */
+  async function settleSells(pub, m, url) {
+    const k = pub + '|' + m, L = (FLY.get(k) || []).filter(e => Date.now() - e.t < 20000); FLY.delete(k); if (!L.length) return null;
+    for (let i = 0; i < 20; i++) {
+      const v = (((await rpc('getSignatureStatuses', [L.map(e => e.sig)], url).catch(() => null)) || {}).value) || [];
+      if (L.every((e, j) => v[j])) break;   /* every one landed or failed */
+      await sleep(300);
+    }
+    const raw = (await tokBal(pub, m, url)).raw, s = ST.get(m + '|' + pub); if (s) s.raw = raw;
+    return raw;
+  }
   async function trade(o, seed, pub, url) {
+    if (o.side === 'sell' && o.live !== false && [...FLY.keys()].some(k => k.startsWith(pub + '|'))) { const m = await mintOf(o.a, url, o.isMint); if (FLY.has(pub + '|' + m)) await settleSells(pub, m, url).catch(() => null); }   /* no sell on the wire: no extra step */
+    const r = await trade0(o, seed, pub, url);
+    if (r && r.sent && r.sig && o.side === 'sell' && r.mint) { const k = pub + '|' + r.mint, L = FLY.get(k) || []; L.push({ sig: r.sig, t: Date.now() }); FLY.set(k, L.slice(-5)); }
+    return r;
+  }
+  async function trade0(o, seed, pub, url) {
     const t0 = Date.now(), jw0 = JW.ms, lap = {}, slip = +o.slip || 20, tip = Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)), prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
     if (!(slip >= 0.1 && slip <= 100)) throw new Error('slippage must be 0.1-100 %');
     const m = await mintOf(o.a, url, o.isMint);
@@ -508,6 +531,7 @@ const SOLX = (() => {
     }
     const hold = +holdingSol || 0, pnl = sold + hold - bought, net = pnl - gas, buyAll = bought, sellAll = sold;
     if (peak > 0 && peak < bought) { sold -= bought - peak; bought = peak; }
+    if (sold < 1e-9) sold = 0;   /* 3.29.14 (owner 1123, "Sold -0.0000"): sells re-bought in full leave net back 0, the float rest showed as -0.0000 */
     return { bought, sold, buyAll, sellAll, gas, hold, pnl, pct: bought > 0 ? pnl / bought * 100 : null, net, netPct: bought > 0 ? net / bought * 100 : null,
       base, prio, tip, plat, rent: Math.max(0, rent), split, nb, ns };
   }
@@ -822,11 +846,13 @@ const SOLX = (() => {
     return cat(...parts);
   }
   const ALT = new Map();
-  async function jupLeg(q, pub, soft, dyn) {
+  async function jupLeg(q, pub, soft, dyn, led) {   /* led: the second leg of a two-leg transaction, spends what the first one gave (3.29.14) */
     const body = { quoteResponse: q, userPublicKey: pub, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: dyn !== false, dynamicSlippage: false };
+    if (led) body.useTokenLedger = true;
     const r = await JF('/swap/v1/swap-instructions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, soft);
     const j = await r.json().catch(() => null);
     if (!r.ok || !j || !j.swapInstruction) throw new Error('could not build the swap: ' + String((j && (j.error || j.message)) || r.status).slice(0, 120));
+    if (led && !(j.tokenLedgerInstruction && j.tokenLedgerInstruction.programId === JUP6)) throw new Error('could not build the swap: no token ledger');
     return j;
   }
   /* 3.21.5 security (audit 1122): a Jupiter answer is not trusted blindly. Before signing, every instruction it gave must be one of:
@@ -860,12 +886,14 @@ const SOLX = (() => {
   async function jupIx(q, pub, o, url, soft, q2) {   /* -> {msg, tip} or throws (the caller falls back to /swap). q2: a second route in the same transaction */
     let tip = Math.round(Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)) * 1e9), prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
     /* the second leg spends tokens the first one makes in the same transaction: Jupiter cannot simulate it, so its limit is a fixed 300k */
-    const [js, bh] = await Promise.all([Promise.all([jupLeg(q, pub, soft), ...(q2 ? [jupLeg(q2, pub, soft, false)] : [])]), blockhash(url)]);
+    const [js, bh] = await Promise.all([Promise.all([jupLeg(q, pub, soft), ...(q2 ? [jupLeg(q2, pub, soft, false, true)] : [])]), blockhash(url)]);
     const conv = x => ({ prog: x.programId, keys: x.accounts.map(a => [a.pubkey, !!a.isSigner, !!a.isWritable]), data: unb64(x.data) });
     const cu = Math.min(1400000, (+js[0].computeUnitLimit || 300000) + (q2 ? 300000 : 0) + 2000 + uq());
     ({ tip, prio } = smart(o, null, cu, tip, prio, url));
     const ixs = [{ prog: CBP, keys: [], data: cat(Uint8Array.of(2), le(cu, 4)) }, { prog: CBP, keys: [], data: cat(Uint8Array.of(3), le(Math.floor(prio * 1e15 / cu), 8)) },
-      ...js.flatMap(j => [...(j.setupInstructions || []).map(conv), conv(j.swapInstruction), ...(j.cleanupInstruction ? [conv(j.cleanupInstruction)] : []), ...(j.otherInstructions || []).map(conv)])];
+      ...js.flatMap((j, i) => [...(j.setupInstructions || []).map(conv),
+        ...(i === 0 && q2 ? [conv(js[1].tokenLedgerInstruction)] : []),   /* 3.29.14: the quote coin balance noted right before the first leg (its account exists by now) */
+        conv(j.swapInstruction), ...(j.cleanupInstruction ? [conv(j.cleanupInstruction)] : []), ...(j.otherInstructions || []).map(conv)])];
     await vetRoute(ixs.map(x => ({ prog: x.prog, keys: x.keys.map(z => z[0]), data: x.data })), pub);
     if (tip > 0) ixs.push({ prog: SYS, keys: [[pub, true, true], [HTIP[Math.floor(Math.random() * HTIP.length)], false, true]], data: cat(le(2, 4), le(tip, 8)) });
     for (const ix of ixs) for (const k of ix.keys) if (k[1] && k[0] !== pub) throw new Error('the route asks for another signer');
