@@ -117,6 +117,18 @@ const SOLX = (() => {
   }
   async function balance(pub, url) { return ((await rpc('getBalance', [pub, { commitment: 'confirmed' }], url)) || {}).value || 0; }
   async function tokBal(owner, mint, url) {
+    /* 3.29.12 (owner 1123: "Solana node: 403", the panel showed No position while he held 20.5M): "every token account of the wallet" is
+       refused by the free nodes (and heavy with 3000+ accounts). The coin's own token account (its address is known) is read instead,
+       with the mint for its program and decimals: one light call every node answers. The old ways stay as the fallback. */
+    try {
+      const [a0, a1] = await Promise.all(TOKEN_PROGS.map(p => ata(owner, p, mint)));
+      const [mi, t0, t1] = await accs([mint, a0, a1], url);
+      if (mi && TOKEN_PROGS.includes(mi.owner) && mi.data.length >= 45) { const ta = mi.owner === TOKEN_PROGS[0] ? t0 : t1; return { raw: ta && ta.data.length >= 72 ? u64(ta.data, 64) : 0n, dec: mi.data[44] }; }
+    } catch (_) {}
+    if (url) { try { return await tokBalAll(owner, mint, url); } catch (_) { return tokBalAll(owner, mint, undefined); } }
+    return tokBalAll(owner, mint, url);
+  }
+  async function tokBalAll(owner, mint, url) {
     if (!url) {   /* the free public node refuses token-account lookups ("Request blocked"): Jupiter's holdings answer them */
       const r = await JF('/ultra/v1/holdings/' + owner); const j = await r.json().catch(() => null);
       if (!r.ok || !j) throw new Error('could not read your token balance (' + r.status + ')');
@@ -1269,6 +1281,10 @@ const SOLX = (() => {
   /* every token account of the wallet holding 0 tokens (each keeps ~0.002 SOL of rent; closing it sends that back to the wallet).
      Token-2022 accounts that still hold withheld transfer fees cannot be closed and are left out. */
   async function emptyAccounts(pub, url) {
+    if (url) { try { return await emptyAccounts0(pub, url); } catch (_) { return emptyAccounts0(pub, undefined); } }   /* 3.29.12: a node that refuses the lookup (403) -> Jupiter's list */
+    return emptyAccounts0(pub, url);
+  }
+  async function emptyAccounts0(pub, url) {
     const out = [];
     if (!url) {   /* the free nodes refuse this lookup from a browser: Jupiter's holdings list the empty accounts and which can be closed */
       const r = await JF('/ultra/v1/holdings/' + pub), j = await r.json().catch(() => null); if (!j || !j.tokens) throw new Error('holdings unavailable');
