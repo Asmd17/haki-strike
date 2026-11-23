@@ -405,7 +405,7 @@ async function syncChain(c, pub, mint, ata) {
     for (const e of L) {
       if (e.v === 2 || !e.sig || n >= 25 || (e.w || w1) !== pub) continue; n++;
       let x = null; try { x = await SOLX.txDeltas(e.sig, pub, mint, null, rpcUrl(c)); } catch (_) { upd.set(e.sig, { v: 2 }); ch = true; continue; }
-      if (!x || x.failed) { if (x) { upd.set(e.sig, { v: 2 }); ch = true; } continue; }
+      if (!x || x.failed) { if (x || Date.now() - (e.t || 0) > 600000) { upd.set(e.sig, { v: 2 }); ch = true; } continue; }   /* 3.29.16: not found 10 min on = never asked again */
       const tip = Math.max(0, e.gas - x.fee / 1e9);   /* what we booked as gas stays; the part above the network fee is the tip */
       upd.set(e.sig, { fee: x.fee / 1e9, base: x.base / 1e9, tip, plat: x.plat / 1e9, back: e.side === 'sell' ? x.back / 1e9 : 0, v: 2 }); ch = true;
     }
@@ -1063,7 +1063,7 @@ async function handle(m) {
     if (hit) r = hit.err ? { st: 'failed', err: hit.err } : { st: 'processed' };
     else { if (Date.now() - (SIGQ.get(a.sig) || 0) < 450) return { st: 'pending' }; SIGQ.set(a.sig, Date.now()); r = await SOLX.txStatus(a.sig, rpcUrl(c)); }   /* the panel asks often; the node at most every 0.45 s */
     const x = RB.get(a.sig);
-    if (r.st === 'pending') { if (x && Date.now() - x.t < 25000 && Date.now() - x.last > (Date.now() - x.t < 3000 ? 400 : 1500)) { x.last = Date.now(); SOLX.sendFast(x.tx64, rpcUrl(c), x.sender).catch(() => {}); } return r; }
+    if (r.st === 'pending') { if (x && Date.now() - x.t < 25000 && Date.now() - x.last > (Date.now() - x.t < 3000 ? 400 : 1500)) { x.last = Date.now(); SOLX.sendFast(x.tx64, rpcUrl(c), x.sender, true).catch(() => {}); } return r; }
     if (r.st === 'failed') {
       r.why = SOLX.whyFailed(r.err); teleErr('tx_fail', r.why);
       /* one automatic second try: price moved past the slippage -> again with 1.5x the slippage (max 50 %); the curve migrated on the
@@ -1221,7 +1221,7 @@ chrome.runtime.onConnect.addListener(port => {
   const stop = () => { for (const id of S.ids) wsUnsub(S.c, id); S.ids = []; clearInterval(S.poll); clearInterval(S.rate); clearInterval(S.chk); clearInterval(S.ar); S.poll = S.rate = S.chk = S.ar = 0; S.rsl.clear(); if (S.st) S.st.live = false; S.st = null; };
   const readAtas = async () => {   /* 3.29.4: the token accounts read directly, kept only when not older than what the feed gave */
     const st = S.st; if (!st || !S.atas.length) return;
-    const r = await SOLX.rpc('getMultipleAccounts', [S.atas.map(q => q.ata), { encoding: 'base64', commitment: 'processed' }], rpcUrl(S.c || {})); if (S.st !== st) return;
+    const r = await SOLX.rpc('getMultipleAccounts', [S.atas.map(q => q.ata), { encoding: 'base64', commitment: 'processed' }], rpcUrl(S.c || {}), true); if (S.st !== st) return;
     const sl = ((r || {}).context || {}).slot || 0, V = (r || {}).value || []; let ch = false;
     S.atas.forEach((q, i) => { const v = V[i], d = v && SOLX.unb64(v.data[0]), raw = d && d.length >= 72 ? SOLX.u64(d, 64) : 0n; if (raw === S.raws.get(q.pub)) return;
       if (setRaw(q.pub, raw, sl)) { ch = true; if (q.pub === S.pubs[0]) { st.raw = raw; st.t = Date.now(); } } });

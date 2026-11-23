@@ -109,11 +109,40 @@ const SOLX = (() => {
   function sellAmount(raw, pct) { raw = BigInt(raw); if (raw <= 0n || !(pct > 0 && pct <= 100)) return 0n; if (pct >= 100) return raw; return raw * BigInt(Math.round(pct * 100)) / 10000n; }
 
   /* ---- network ---- */
-  async function rpc(method, params, url) {
-    const r = await fetch(url || RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
-    const j = await r.json().catch(() => null);
-    if (j && 'result' in j) return j.result;
-    throw new Error('Solana node: ' + JSON.stringify((j && j.error) || r.status).slice(0, 120));
+  /* 3.29.16 (owner 1123: "Solana node: too many requests" under the panel): right after a trade lands the panel reads the balance, the
+     token accounts, the ledger history and the fill of every wallet at once; that burst passed the node's limit per second (Helius
+     Developer: 50) and a read was refused. Every call to your node now goes through one gate of RG.cap calls a second: the history reads
+     (getTransaction / getSignaturesForAddress, never on the click path) may fill half of it, the panel's other reads 80 %, and the reads of
+     a trade being made all of it, so a click always has room. A "too many requests" answer = asked again 150 / 400 / 900 / 1500 ms later,
+     and for a minute the gate holds to 70 % of the rate that was refused (a smaller plan finds its own pace). Below the limit it costs 0 ms. */
+  const RW = [], RG = { cap: 40, until: 0, n429: 0, hot: 0 }, RM = [], LOWM = new Set(['getTransaction', 'getSignaturesForAddress']);
+  const rwN = now => { while (RW.length && now - RW[0] >= 1000) RW.shift(); while (RM.length && now - RM[0][0] >= 1000) RM.shift(); return RW.length; };
+  const rgCap = (low, now) => { const c = now < RG.until ? RG.slow : RG.cap; return Math.max(1, Math.floor(c * (low ? 0.5 : RG.hot > 0 ? 1 : 0.8))); };
+  async function gate(method, low) {
+    for (;;) {
+      const now = Date.now(), n = rwN(now), cap = rgCap(low, now);
+      if (n < cap) { RW.push(now); RM.push([now, method]); return; }
+      await sleep(Math.max(10, RW[n - cap] + 1001 - now));
+    }
+  }
+  const tooMany = (r, e) => r.status === 429 || /too many|rate.?limit/i.test(JSON.stringify(e || ''));
+  function rgHit() {   /* once a second at most: a burst of refusals is one signal, not ten */
+    const now = Date.now(); RG.n429++; if (now - (RG.hitT || 0) < 1000) return; RG.hitT = now;
+    const seen = rwN(now), base = now < RG.until ? Math.min(RG.slow, seen) : seen; RG.slow = Math.max(4, Math.floor(base * 0.7)); RG.until = now + 60000;
+  }
+  const rgTop = () => { const c = {}; for (const [, m] of RM) c[m] = (c[m] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, k]) => m.replace(/^get/, '') + ' ' + k).join(', '); };
+  async function rpc(method, params, url, low) {
+    low = !!low || LOWM.has(method);
+    for (let i = 0; ; i++) {
+      if (url) await gate(method, low);
+      const r = await fetch(url || RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+      const j = await r.json().catch(() => null);
+      if (j && 'result' in j) return j.result;
+      const e = (j && j.error) || r.status;
+      if (tooMany(r, e)) { if (url) rgHit(); if (i < 4) { await sleep([150, 400, 900, 1500][i]); continue; }
+        throw new Error('Solana node busy (too many requests' + (url ? ', last second: ' + rgTop() : '') + '): nothing sent, try again'); }
+      throw new Error('Solana node: ' + JSON.stringify(e).slice(0, 120));
+    }
   }
   async function balance(pub, url) { return ((await rpc('getBalance', [pub, { commitment: 'confirmed' }], url)) || {}).value || 0; }
   async function tokBal(owner, mint, url) {
@@ -317,6 +346,9 @@ const SOLX = (() => {
     }
   }
   async function trade(o, seed, pub, url) {
+    RG.hot++; try { return await trade1(o, seed, pub, url); } finally { RG.hot--; }   /* 3.29.16: its node reads may use the whole gate */
+  }
+  async function trade1(o, seed, pub, url) {
     let oo = o;
     if (o.side === 'sell' && o.live !== false && [...FLY.keys()].some(k => k.startsWith(pub + '|'))) {   /* no sell on the wire: no extra step */
       const m = await mintOf(o.a, url, o.isMint);
@@ -789,14 +821,18 @@ const SOLX = (() => {
   const LANE = new Map();   /* 3.26.0: url -> {bad, until}: 3 refusals in a row = skipped for 2 min (the node itself never is) */
   const laneOk = u => { const x = LANE.get(u); return !x || x.until < Date.now(); };
   const laneNote = (u, ok) => { const x = LANE.get(u) || { bad: 0, until: 0 }; if (ok) { x.bad = 0; x.until = 0; } else if (++x.bad >= 3) { x.until = Date.now() + 120000; x.bad = 0; } LANE.set(u, x); };
-  async function sendFast(tx64, url, sender) {   /* Helius Sender (tip inside) + the node, at once; ok when either took it */
+  async function sendFast(tx64, url, sender, resend) {   /* Helius Sender (tip inside) + the node, at once; ok when either took it */
     const one0 = async (u, params) => { try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params }) }); const j = await r.json(); return ['result' in j, u, JSON.stringify(j.error || '').slice(0, 100)]; } catch (e) { return [false, u, String(e).slice(0, 100)]; } };
     const one = (u, params) => one0(u, params).then(x => { laneNote(u.split('?')[0], x[0]); return x; });
-    const L = [one(url || RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 5 }])];
     /* 3.17.0: sender = the tip in lamports (true = old callers). Helius Sender's default lanes take tips from 0.001 SOL; a smaller tip goes
        to its SWQOS lane (from 0.000005 SOL), so the tip you pay always buys speed */
-    const swq = typeof sender === 'number' && sender < 1000000;
-    if (sender) for (const u of [...SENDERS_NEAR, SENDER].filter(laneOk)) L.push(one(swq ? u + '?swqos_only=true' : u, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 0 }]));
+    const swq = typeof sender === 'number' && sender < 1000000, SL = sender ? [...SENDERS_NEAR, SENDER].filter(laneOk) : [];
+    /* 3.29.16: a send to your node counts in the gate. A RE-send of a landing trade (every 0.4-1.5 s) leaves the node's lane out while the
+       gate is full and Helius Sender lanes carry it (the first send always goes to every lane) */
+    const skip = resend && url && SL.length && rwN(Date.now()) >= rgCap(false, Date.now());
+    const L = skip ? [] : [one(url || RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 5 }])];
+    if (url && !skip) { RW.push(Date.now()); RM.push([Date.now(), 'sendTransaction']); }
+    for (const u of SL) L.push(one(swq ? u + '?swqos_only=true' : u, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 0 }]));
     if (url) L.push(one(RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 5 }]));
     /* 3.11.4 (owner: "0.3-0.5 s"): done the moment the first lane took it; the others finish on their own (was: wait for the slowest) */
     return new Promise((res, rej) => {
@@ -1437,7 +1473,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { paySol, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { paySol, RG, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64 };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

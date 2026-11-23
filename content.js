@@ -748,6 +748,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
       return;
     }
     const st = await send('state');
+    if (st.err && /Solana node/.test(st.err)) { clearTimeout(refreshBal.t); refreshBal.t = setTimeout(() => { if (!busy && !document.hidden) refreshBal(); }, 3000); return; }   /* 3.29.16: a node hiccup: the last balance stays, asked again in 3 s, no red line over the trade's own message */
     if (st.err) { $('.wb').textContent = '–'; status(st.err, 'bad'); return; }
     const n = +st.n || 1; nW = n; bal = st.sol; paintBal(); $('.wn').textContent = n > 1 ? n : ''; $('.wn').classList.toggle('on', n > 1);
     $('.wal').title = n > 1 ? n + ' wallets trade together (SOL added up). Click to choose.' : 'Wallet. Click to choose the wallets that trade.';
