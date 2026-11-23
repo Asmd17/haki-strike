@@ -665,7 +665,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   let QS = null;   /* 3.29.4 (owner 1123: "sometimes 10 % or 5 % does not react"): the sell clicked while another one is being sent */
   const pre = () => (C && C.presets && C.presets[C.preset || 0]) || { slip: 20, prio: 0.0001, tip: 0.0003 };
   function aslipPaint() {   /* 3.24.0 anti-sandwich: the slippage the next buy / sell will use, from this coin's real moves (your preset is the most) */
-    const sl = $$('.sl'), A2 = last && last.aslip, on = C && C.autoSlip !== false && !PAPER;
+    const sl = $$('.sl'), A2 = last && last.aslip, on = false;   /* 3.29.5 (owner 1123): no anti-sandwich slippage, his preset as it is */
     [['b', 0], ['s', 1]].forEach(([k, i]) => { const e = sl[i]; if (!e) return; const v = on && A2 && A2[k];
       if (v) { const t = (+v).toFixed(1).replace(/\.0$/, '') + '%'; if (e.textContent !== t) e.textContent = t; e.classList.add('asl'); e.parentElement.title = 'Anti-sandwich slippage ' + t + ': set from how this coin really moves between a click and its block. Your preset is the most it can be (Settings → Speed and fees)'; }
       else if (e.classList.contains('asl')) { e.classList.remove('asl'); e.parentElement.title = 'Slippage'; } });

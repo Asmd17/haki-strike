@@ -711,7 +711,7 @@ try { chrome.alarms.create('lwClaim', { periodInMinutes: 30 }); chrome.alarms.on
 const OGR = new Map();   /* mint -> {t, p}: OG answers */
 async function handle(m) {
   const a = m.arg || {}, c = await cfg();
-  if (m.op === 'cfg') { const b = await box(), u = await unlocked(), S = await selected(); return { upd: UPD, bscBuys: c.bscBuys, bscBuys2: c.bscBuys2, buys2: c.buys2, sells2: c.sells2, bscSlip: c.bscSlip, bscGwei: c.bscGwei, buys: c.buys, sells: c.sells, quick: c.quick, slip: c.slip, presets: c.presets, preset: c.preset, sellExact: c.sellExact !== false, exactTol: Math.max(0.5, +c.exactTol || 2), exactTolBuy: Math.max(0.5, +c.exactTolBuy || 5), hk: !!c.hk, snipe: typeof SNIPE !== 'undefined', autoSlip: c.autoSlip !== false, hkMod: c.hkMod, hkBuy: c.hkBuy, hkSell: c.hkSell, pulse: c.pulse, sound: c.sound !== false, vol: +c.vol, ui: Math.min(1, Math.max(0.6, +c.ui || 1)), pz: Math.min(1.5, Math.max(0.75, +c.pz || 1)), ready: !!(b && u), wallet: b ? b.pub : '', nw: S.length, cTexts: c.cTexts, cAuto: !!c.cAuto, cMin: c.cMin }; }
+  if (m.op === 'cfg') { const b = await box(), u = await unlocked(), S = await selected(); return { upd: UPD, bscBuys: c.bscBuys, bscBuys2: c.bscBuys2, buys2: c.buys2, sells2: c.sells2, bscSlip: c.bscSlip, bscGwei: c.bscGwei, buys: c.buys, sells: c.sells, quick: c.quick, slip: c.slip, presets: c.presets, preset: c.preset, sellExact: c.sellExact !== false, exactTol: Math.max(0.5, +c.exactTol || 2), exactTolBuy: Math.max(0.5, +c.exactTolBuy || 5), hk: !!c.hk, snipe: typeof SNIPE !== 'undefined', autoSlip: false, hkMod: c.hkMod, hkBuy: c.hkBuy, hkSell: c.hkSell, pulse: c.pulse, sound: c.sound !== false, vol: +c.vol, ui: Math.min(1, Math.max(0.6, +c.ui || 1)), pz: Math.min(1.5, Math.max(0.75, +c.pz || 1)), ready: !!(b && u), wallet: b ? b.pub : '', nw: S.length, cTexts: c.cTexts, cAuto: !!c.cAuto, cMin: c.cMin }; }
   if (m.op === 'wallets') {   /* the list with balances (panel menu, settings); 3.15.0 with a = the coin on the page: how much of it each wallet holds */
     const W = await walletsAll(), S = new Set((await selected()).map(w => w.pub)), K = await seedsAll(), url = rpcUrl(c);
     const mint = a && a.a && !/^0x/i.test(a.a) ? await SOLX.mintOf(a.a, url, !!a.isMint).catch(() => null) : null;
@@ -893,7 +893,7 @@ async function handle(m) {
     const w = (await bwalletsAll())[0], me = w ? w.addr : '0x0000000000000000000000000000000000000001';
     const [p, bnb] = await Promise.all([BSC.position(a.token, me), w ? BSC.bnb(me).then(v => Number(v) / 1e18).catch(() => null) : null]);
     const tk = String(p.token || a.token).toLowerCase(); pxSample(tk, +p.price);   /* 3.24.0 */
-    const aslip = c.autoSlip !== false ? { b: autoSlip(tk, 'buy', +c.bscSlip || 15), s: autoSlip(tk, 'sell', +c.bscSlip || 15) } : null;
+    const aslip = false ? { b: autoSlip(tk, 'buy', +c.bscSlip || 15), s: autoSlip(tk, 'sell', +c.bscSlip || 15) } : null;
     return Object.assign(p, { bnb, wallet: !!w, aslip });
   }
   if (m.op === 'bscTrade') {   /* {side, token, bnb | pct} with the BSC settings (slippage, gas) */
@@ -901,7 +901,7 @@ async function handle(m) {
     const { addr, key } = await bscKey();
     const maxB = Math.min(100, Math.max(0.001, +c.maxBnb || 2));   /* 3.21.5 security: a cap per BNB buy, as Max per trade on Solana */
     if (a.side === 'buy' && !(+a.bnb > 0 && +a.bnb <= maxB)) throw new Error('above your BNB cap per trade (' + maxB + ' BNB, Settings → Buy and sell)');
-    const s0 = +c.bscSlip || 15, as = c.autoSlip !== false ? autoSlip(String(a.token).toLowerCase(), a.side, s0) : null;   /* 3.24.0 anti-sandwich */
+    const s0 = +c.bscSlip || 15, as = false ? autoSlip(String(a.token).toLowerCase(), a.side, s0) : null;   /* 3.24.0 anti-sandwich */
     const r = await BSC.trade({ side: a.side, token: a.token, bnb: a.bnb, pct: a.pct, slip: as != null ? as : s0, gwei: +c.bscGwei || 0, live: a.live !== false }, key, addr);
     if (r && as != null) r.aslip = as;
     return r;
@@ -1100,7 +1100,7 @@ async function handle(m) {
     busy.add(lk);
     try {
       const fz = feeT(c, a.side, /^auto-/.test(ck)), t0 = Date.now(); if (fz.exact && +a.mc > 0) fz.mcClick = +a.mc;
-      if (c.autoSlip !== false && !/^auto-/.test(ck)) { const s0 = fz.slip, as = autoSlip(AMAP.get(a.a) || a.a, a.side, s0); if (as != null && as < s0) { fz.slip = as; fz.slipCap = s0; fz.auto = true; } }   /* 3.24.0 */   /* the coin's MC (in SOL) the panel showed at the click */   /* auto sell (take profit / stop): the preset slippage, it must fill */
+      if (false && !/^auto-/.test(ck)) { const s0 = fz.slip, as = autoSlip(AMAP.get(a.a) || a.a, a.side, s0); if (as != null && as < s0) { fz.slip = as; fz.slipCap = s0; fz.auto = true; } }   /* 3.24.0 */   /* the coin's MC (in SOL) the panel showed at the click */   /* auto sell (take profit / stop): the preset slippage, it must fill */
       const one = async w => {
         const u = { seed: SOLX.unb64(K[w.pub]), pub: w.pub }, hb = BALS.get(w.pub), have = hb && Date.now() - hb.t < 60000 ? hb.v : null;
         try {
@@ -1201,7 +1201,7 @@ chrome.runtime.onConnect.addListener(port => {
       S.tm = 0; S.last = Date.now(); if (!S.st) return;
       const st = S.st, raw = total(), v = SOLX.valueNow(Object.assign({}, st, { raw })); if (v == null) return;
       if (S.a && S.mint) AMAP.set(S.a, S.mint);
-      const ac = S.c && S.c.autoSlip !== false ? { b: autoSlip(S.mint, 'buy', feeT(S.c, 'buy').slip), s: autoSlip(S.mint, 'sell', feeT(S.c, 'sell').slip) } : null;
+      const ac = false ? { b: autoSlip(S.mint, 'buy', feeT(S.c, 'buy').slip), s: autoSlip(S.mint, 'sell', feeT(S.c, 'sell').slip) } : null;
       post({ sym: S.sym, mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length, aslip: ac });
     }, d);
   };
