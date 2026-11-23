@@ -306,7 +306,7 @@ const SOLX = (() => {
     { const out = +b.q.outAmount, v = o.side === 'sell' ? oo._spot : (out > 0 ? spotSol(st, BigInt(b.q.outAmount)) : null);   /* 3.29.6: ours when we know the price */
       const own = o.side === 'sell' ? (v > 0 && out > 0 ? (1 - out / 1e9 / v) * 100 : null) : (v > 0 && sol > 0 ? (1 - v / sol) * 100 : null);
       if (own != null && isFinite(own)) imp = Math.max(0, own); }
-    if (imp > MAX_IMPACT) throw new Error('price impact ' + imp.toFixed(0) + ' % is too high');
+    if (o.side === 'buy' && imp > MAX_IMPACT) throw new Error('price impact ' + imp.toFixed(0) + ' % is too high');
     /* 3.12.22 Exact: a route quoted after the click (Jupiter, a coin paired to USDC / another coin) is checked against the MC the panel showed at
        the click; allowed = the Exact % + the route's own price impact + 1.5 % for pool fees. Further = not sent (owner 1120: 170K -> 182K) */
     if (o.exact && +o.mcClick > 0 && st && st.supply > 0n && +b.q.inAmount > 0 && +b.q.outAmount > 0) {
@@ -338,7 +338,7 @@ const SOLX = (() => {
     } else if (o.side === 'sell') { if (!(+o.pct > 0 && +o.pct <= 100)) throw new Error('sell percent must be 1-100'); if (st.raw <= 0n) throw new Error('you hold none of this token'); }
     else throw new Error('side must be buy or sell');
     const b = await pumpBuild(Object.assign({}, o, { tip }), st, pub, url);
-    if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
+    if (o.side === 'buy' && b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
     const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre, route: ['pump.fun'], native: true, tx64,
       mc0: Number(st.curve.vQ) * Number(st.supply) / Number(st.curve.vT) / 1e9, sup: st.supply.toString() };
@@ -357,7 +357,7 @@ const SOLX = (() => {
     let imp1 = (+q1.priceImpactPct || 0) * 100;
     { const rate = quoteRateCached(qm), base = side === 'buy' ? Number(x) : (+o._spot || 0) * 1e9;   /* 3.29.6: step 1 measured from our prices (lamports per quote unit) */
       if (rate > 0 && base > 0 && +q1.outAmount > 0) imp1 = Math.max(0, (1 - Number(q1.outAmount) * rate / base) * 100); }
-    if (imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
+    if (side === 'buy' && imp1 > MAX_IMPACT) throw new Error('price impact ' + imp1.toFixed(0) + ' % is too high');
     const [[mi], b1] = await Promise.all([accs([qm], url), jupIx(q1, pub, o, url, false)]); if (!mi || !TOKEN_PROGS.includes(mi.owner)) throw new Error('quote coin not found');
     const qa = await ata(pub, mi.owner, qm), held = async () => { const [a] = await accs([qa], url); return a && a.data.length >= 72 ? u64(a.data, 64) : 0n; };
     const [before, sg1] = await Promise.all([held(), sign(seed, b1.msg)]), tx1 = b64(cat(Uint8Array.of(1), sg1, b1.msg)), sig1 = b58e(sg1);
@@ -977,7 +977,7 @@ const SOLX = (() => {
     } else if (o.side === 'sell') { if (!(+o.pct > 0 && +o.pct <= 100)) throw new Error('sell percent must be 1-100'); if (st.raw <= 0n) throw new Error('you hold none of this token'); }
     else throw new Error('side must be buy or sell');
     const b = await poolBuild(Object.assign({}, o, { tip }), st, P, pub, url);
-    if (b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
+    if (o.side === 'buy' && b.impact > MAX_IMPACT) throw new Error('price impact ' + b.impact.toFixed(0) + ' % is too high');
     const sg = await sign(seed, b.msg), tx64 = b64(cat(Uint8Array.of(1), sg, b.msg));
     const res = { ok: true, side: o.side, mint: st.mint, sig: b58e(sg), impact: +b.impact.toFixed(2), tip: b.tip / 1e9, prio: b.prio, pre: !!(st.live && st.pool), route: ['PumpSwap'], native: true, pool: true, tx64,
       mc0: Number(P.Q) * Number(st.supply) / Number(P.B) / 1e9, sup: st.supply.toString() };
