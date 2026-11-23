@@ -692,7 +692,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   function connect() {
     try { port = chrome.runtime.connect({ name: 'live' }); } catch (_) { port = null; return; }
     port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; }
-      if (m.snipe) { const z = m.snipe; status(z.msg, z.st === 'sent' || z.st === 'sim' ? 'ok' : z.st === 'error' ? 'bad' : ''); if (z.st === 'sent') window.hkSound('buy'); if (z.st !== 'armed') { SNP.delete(z.mint); snpPaint(); } return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
+      if (m.snipe) { const z = m.snipe; status(z.msg, z.st === 'sent' || z.st === 'sim' || z.st === 'sold' ? 'ok' : z.st === 'error' ? 'bad' : ''); if (z.st === 'sent') window.hkSound('buy'); if (z.st === 'sold') window.hkSound('sell'); if (z.st !== 'armed') { SNP.delete(z.mint); snpPaint(); } return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
     port.onDisconnect.addListener(() => { port = null; setTimeout(() => { connect(); watchNow(); }, 600); });
   }
   let bscT = 0;
