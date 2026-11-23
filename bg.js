@@ -1352,4 +1352,6 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
 });
 /* 3.25.0: an optional add-on of the owner's own build (absent elsewhere: nothing happens) */
 setTimeout(() => licHello(false).catch(() => {}), 3000);   /* 3.28.0: the subscription token, refreshed at most every 20 min */
-try { importScripts('snipe.js'); } catch (_) {}
+/* 3.29.13 (owner 1123: "I switched snipe off, it still tries and eats money, turn it off"): the snipe add-on is not loaded at all any more.
+   No migration feed, no auto snipe, no Snipe button or settings tab. */
+/* try { importScripts('snipe.js'); } catch (_) {} */
