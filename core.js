@@ -240,6 +240,10 @@ const SOLX = (() => {
     if (qm && qm !== WSOL && NOQ.get(m) > Date.now() - 60000) return viaQuote(side, m, x, slipBps, qm, o, pub, url, soft);   /* known: no direct route */
     /* a brand-new coin (seen 1116: a pump.fun curve quoted in another token) is quoted by Jupiter a few seconds before its swap builder
        knows the coin's token program ("Missing token program for <mint>"): a trade asks again for up to ~4 s instead of failing */
+    /* 3.29.10 (route gate 1123: a direct buy gave 6 % fewer tokens than going through the coin's quote token): for such coins the two-leg
+       price is asked at the same time as the direct one; clearly better (2 %+) -> the quote-token route */
+    const estP = qm && qm !== WSOL ? (async () => { const a = await quote(side === 'buy' ? WSOL : m, qm, String(x), slipBps);
+      return quote(qm, side === 'buy' ? m : WSOL, String(BigInt(Math.floor(Number(a.outAmount) * 0.98))), slipBps); })().catch(() => null) : null;
     for (let i = 0; ; i++) {
       let q;
       try { q = side === 'buy' ? await quote(WSOL, m, String(x), slipBps) : await quote(m, WSOL, String(x), slipBps); }
@@ -247,10 +251,10 @@ const SOLX = (() => {
       /* 3.29.6 (owner 1123, a USD-quoted pump.fun coin: "price impact 93 % is too high" on a $70 sell): the direct route went through a dead
          pool. Over 5 % impact: the route through the coin's quote token is tried too and the one that gives more wins; none in one
          transaction and the direct one is unusable -> two steps */
-      const imp0 = (+q.priceImpactPct || 0) * 100;
-      if (qm && qm !== WSOL && imp0 > 5) {
+      const imp0 = (+q.priceImpactPct || 0) * 100, est = estP ? await estP : null, better = k => !!est && BigInt(est.outAmount) * 100n > BigInt(q.outAmount) * BigInt(k);
+      if (qm && qm !== WSOL && (imp0 > 5 || better(102))) {
         try { const v = await viaQuote(side, m, x, slipBps, qm, o, pub, url, soft); if (BigInt(v.q.outAmount) > BigInt(q.outAmount)) { NOQ.set(m, Date.now()); if (NOQ.size > 500) NOQ.clear(); return v; } }
-        catch (e) { if (imp0 > MAX_IMPACT) { NOQ.set(m, Date.now()); if (e.two || soft) throw e; } }   /* a hover never pre-builds the dead direct route */
+        catch (e) { if (imp0 > MAX_IMPACT || better(105)) { NOQ.set(m, Date.now()); if (e.two || soft) throw e; } }   /* a hover never pre-builds the dead direct route */
       }
       let e1;
       try { const b = await jupIx(q, pub, o, url, soft); return { q, msg: b.msg, tip: b.tip, t: Date.now() }; }

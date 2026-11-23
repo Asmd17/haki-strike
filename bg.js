@@ -351,22 +351,31 @@ const busy = new Set(), done = new Map();
 
 /* PnL ledger (chrome.storage.local 'led' = {mint: [{t, side, sol, gas, rent, tok, sig}]}): every trade this extension sent is kept as
    pending (storage.session 'pend') and booked once the chain shows it, with the amounts read from the transaction itself. */
-async function pend(sig, mint, side, tipLamports, w, pair) { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); pend[sig] = { mint, side, tip: tipLamports, t: Date.now(), w, pair }; await chrome.storage.session.set({ pend }); }
+/* 3.29.10 (owner 1123, Chip: Sold 1.301 where the chain says 1.550, PnL -0.001 instead of +0.14): the ledger and the pending list were
+   read, changed during network calls and written back whole by several tasks at once (a trade's two steps, the chain sync, the booking):
+   the last writer erased what the others had just added (step 2 of a sell, 0.154 SOL, lost). Every change now goes through MUT, one at a
+   time, on a fresh read; network calls stay outside it. */
+let MUTQ = Promise.resolve();
+const MUT = fn => { const r = MUTQ.then(fn); MUTQ = r.catch(() => {}); return r; };
+async function pend(sig, mint, side, tipLamports, w, pair) { return MUT(async () => { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); pend[sig] = { mint, side, tip: tipLamports, t: Date.now(), w, pair }; await chrome.storage.session.set({ pend }); }); }
 async function book(c, pub0, only) {
   const { pend = {} } = await chrome.storage.session.get({ pend: {} }); let ch = false;
   for (const [sig, p] of Object.entries(pend)) {
     if (only && sig !== only && p.pair !== only) continue;   /* 3.29.6: step 1 of a two-step trade with its step 2 */
     const pub = p.w || pub0;
     let x = null; try { x = await SOLX.txDeltas(sig, pub, p.mint, p.tip, rpcUrl(c)); } catch (_) { x = null; }
-    if (!x) { if (Date.now() - p.t > 180000) { delete pend[sig]; ch = true; } continue; }   /* not visible after 3 min: dropped (failed / expired) */
-    delete pend[sig]; ch = true;
-    if (x.failed) continue;
+    if (!x) { if (Date.now() - p.t > 180000) { await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); ch = true; } continue; }   /* not visible after 3 min: dropped (failed / expired) */
+    ch = true;
+    if (x.failed) { await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); continue; }
     const e = { t: x.t || Date.now(), side: p.side, gas: (x.fee + x.tip) / 1e9, fee: x.fee / 1e9, base: x.base / 1e9, tip: x.tip / 1e9, plat: x.plat / 1e9, back: x.back / 1e9, v: 2, rent: x.rent / 1e9, tok: x.tok, dec: x.dec, sig, w: pub };
     e.sol = p.side === 'buy' ? Math.max(0, -x.d - x.fee - x.tip - x.rent) / 1e9 : Math.max(0, x.d + x.fee + x.tip) / 1e9;
-    const { led = {} } = await chrome.storage.local.get({ led: {} }); const L = led[p.mint] = led[p.mint] || [];
-    if (!L.some(y => y.sig === sig)) { L.push(e); if (L.length > 300) L.splice(0, L.length - 300); await chrome.storage.local.set({ led }); if (e.side === 'buy') autoCallout(c, p.mint).catch(() => {}); }
+    const added = await MUT(async () => {   /* booked and taken off the pending list in one step */
+      const { led = {} } = await chrome.storage.local.get({ led: {} }), { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); const L = led[p.mint] = led[p.mint] || [];
+      let n = false; if (!L.some(y => y.sig === sig)) { L.push(e); L.sort((a, b) => a.t - b.t); if (L.length > 300) L.splice(0, L.length - 300); await chrome.storage.local.set({ led }); n = true; }
+      delete q[sig]; await chrome.storage.session.set({ pend: q }); return n; });
+    if (added && e.side === 'buy') autoCallout(c, p.mint).catch(() => {});
   }
-  if (ch) { await chrome.storage.session.set({ pend }); liveLedger(); }
+  if (ch) liveLedger();
   return ch;
 }
 /* every trade of this wallet on the coin, wherever it was made (Axiom's own buttons, another terminal): read from the chain through the
@@ -377,30 +386,34 @@ async function syncChain(c, pub, mint, ata) {
   try {
     const sigs = await SOLX.rpc('getSignaturesForAddress', [ata, { limit: 40, commitment: 'confirmed' }], rpcUrl(c)).catch(() => []);
     const seen = SEEN.get(k) || new Set(); SEEN.set(k, seen);
-    const { pend = {} } = await chrome.storage.session.get({ pend: {} }), { led = {} } = await chrome.storage.local.get({ led: {} });
-    const L = led[mint] = led[mint] || []; let ch = false;
+    const { pend = {} } = await chrome.storage.session.get({ pend: {} }), { led: led0 = {} } = await chrome.storage.local.get({ led: {} });
+    const L = (led0[mint] || []).slice(), known = new Set(L.map(y => y.sig)); let ch = false; const adds = [], upd = new Map();
     for (const s of (sigs || []).slice().reverse()) {
       const g = s.signature;
-      if (s.err || seen.has(g) || pend[g] || L.some(y => y.sig === g)) { seen.add(g); continue; }
+      if (s.err || seen.has(g) || pend[g] || known.has(g)) { seen.add(g); continue; }
       let x = null; try { x = await SOLX.txDeltas(g, pub, mint, null, rpcUrl(c)); } catch (_) { seen.add(g); continue; }
       if (!x) continue;   /* not visible yet: next time */
       seen.add(g);
       if (x.failed || !x.payer || x.tok === '0') continue;   /* tokens sent to you by someone else are not a trade */
       const buy = BigInt(x.tok) > 0n, e = { t: x.t || Date.now(), side: buy ? 'buy' : 'sell', gas: (x.fee + x.tip) / 1e9, fee: x.fee / 1e9, base: x.base / 1e9, tip: x.tip / 1e9, plat: x.plat / 1e9, back: x.back / 1e9, v: 2, rent: x.rent / 1e9, tok: x.tok, dec: x.dec, sig: g, ext: true, w: pub };
       e.sol = buy ? Math.max(0, -x.d - x.fee - x.tip - x.rent) / 1e9 : Math.max(0, x.d + x.fee + x.tip - x.back) / 1e9;
-      L.push(e); ch = true;
+      adds.push(e); ch = true;
     }
     /* trades booked before 3.3.5 have the gas as one number: read them once more for the split (network / priority / tips, Axiom's fee) */
     let n = 0;
     const w1 = await legacyW();
     for (const e of L) {
       if (e.v === 2 || !e.sig || n >= 25 || (e.w || w1) !== pub) continue; n++;
-      let x = null; try { x = await SOLX.txDeltas(e.sig, pub, mint, null, rpcUrl(c)); } catch (_) { e.v = 2; ch = true; continue; }
-      if (!x || x.failed) { if (x) { e.v = 2; ch = true; } continue; }
+      let x = null; try { x = await SOLX.txDeltas(e.sig, pub, mint, null, rpcUrl(c)); } catch (_) { upd.set(e.sig, { v: 2 }); ch = true; continue; }
+      if (!x || x.failed) { if (x) { upd.set(e.sig, { v: 2 }); ch = true; } continue; }
       const tip = Math.max(0, e.gas - x.fee / 1e9);   /* what we booked as gas stays; the part above the network fee is the tip */
-      Object.assign(e, { fee: x.fee / 1e9, base: x.base / 1e9, tip, plat: x.plat / 1e9, back: e.side === 'sell' ? x.back / 1e9 : 0, v: 2 }); ch = true;
+      upd.set(e.sig, { fee: x.fee / 1e9, base: x.base / 1e9, tip, plat: x.plat / 1e9, back: e.side === 'sell' ? x.back / 1e9 : 0, v: 2 }); ch = true;
     }
-    if (ch) { L.sort((a, b) => a.t - b.t); if (L.length > 300) L.splice(0, L.length - 300); await chrome.storage.local.set({ led }); liveLedger(); }
+    if (ch) { await MUT(async () => {   /* 3.29.10: merged into the ledger as it is NOW (it may have new trades since the read above) */
+      const { led = {} } = await chrome.storage.local.get({ led: {} }), M = led[mint] = led[mint] || [];
+      for (const e of adds) if (!M.some(y => y.sig === e.sig)) M.push(e);
+      for (const y of M) { const u = upd.get(y.sig); if (u) Object.assign(y, u); }
+      M.sort((a, b) => a.t - b.t); if (M.length > 300) M.splice(0, M.length - 300); await chrome.storage.local.set({ led }); }); liveLedger(); }
   } finally { SYNCING.delete(k); }
 }
 /* ---- Share PnL: the card data for share/share.html (HAKI's share card). The coin's name / picture / price history come from
@@ -1087,7 +1100,7 @@ async function handle(m) {
     for (const L of Object.values(led)) { const e = L.find(y => y.sig === a.sig); if (e) return { ok: true, sol: e.sol, tok: e.tok }; }
     return { ok: false };
   }
-  if (m.op === 'resetPnl') { const { led = {} } = await chrome.storage.local.get({ led: {} }); delete led[a.mint]; await chrome.storage.local.set({ led }); return { ok: true }; }
+  if (m.op === 'resetPnl') { await MUT(async () => { const { led = {} } = await chrome.storage.local.get({ led: {} }); delete led[a.mint]; await chrome.storage.local.set({ led }); }); return { ok: true }; }
   if (m.op === 'trade') {   /* every trading wallet at once: each buys the amount / sells its own %; one wallet failing does not stop the others */
     if (a.side !== 'sell') await licGate();   /* 3.28.0: buying needs the subscription (or the free week); selling never does */
     const K = await seedsAll(), ready = SW.filter(w => K[w.pub]);
