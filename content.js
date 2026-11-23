@@ -6,6 +6,17 @@
   /* once per page; after the extension updated itself the old copy is dead (its extension context is gone), so this one takes over */
   const alive = () => { try { return !!(chrome.runtime && chrome.runtime.id); } catch (_) { return false; } };
   if (typeof window.__hakiAx === 'function' && window.__hakiAx()) return; window.__hakiAx = alive;
+  /* 3.29.17 (owner 1123: "the panel lags sometimes, is it drawn several times?"): one panel is drawn, but after every self-update the OLD
+     copy of this script stays in each open tab (Chrome does not stop it) and its timers ran on: its route every 0.3 s, a layout read of
+     the page every second (5 x elementsFromPoint, ~2-7 ms each on Axiom), an observer on every change of the page (~90 a second).
+     8 updates in a day = 8 hidden copies per tab not reloaded since (measured: 4 old copies = 5x the layout reads, ~27 calls a second each).
+     Now every timer and observer of a copy checks that its extension is still there; the first time it is not, the copy stops them all. */
+  const IVS = new Set(), OBS = new Set(); let DEAD = false;
+  const die = () => { if (DEAD) return; DEAD = true; for (const id of IVS) window.clearInterval(id); IVS.clear(); for (const o of OBS) { try { o.disconnect(); } catch (_) {} } OBS.clear(); };
+  const setInterval = (f, ms) => { const id = window.setInterval(() => { if (DEAD) return; if (!alive()) { die(); return; } f(); }, ms); IVS.add(id); return id; };
+  const clearInterval = id => { IVS.delete(id); window.clearInterval(id); };
+  const MutationObserver = class extends window.MutationObserver { constructor(f) { super((l, o) => { if (DEAD) return; if (!alive()) { die(); return; } f(l, o); }); OBS.add(this); } };
+  const ResizeObserver = class extends window.ResizeObserver { constructor(f) { super((l, o) => { if (DEAD) return; if (!alive()) { die(); return; } f(l, o); }); OBS.add(this); } };
   if (window.top === window) { const old = document.getElementById('haki-ax'); if (old) old.remove(); }
   /* 3.20.5 hotkeys (owner: "hotkeys don't work; plain Q W E R or Ctrl + Q; never buy by itself when the window is minimised or another app is
      on top"). The key is matched by its PLACE on the keyboard (e.code), so a Russian / any layout works (Q = Й). Modes: plain key, Ctrl,
