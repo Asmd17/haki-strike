@@ -1263,7 +1263,7 @@ chrome.runtime.onConnect.addListener(port => {
             if (!setRaw(q.pub, raw, sl)) return; if (q.pub === b.pub) { S.st.raw = raw; S.st.t = Date.now(); } paint(); syncSoon(q); }));
           if (gen !== S.gen) { stop(); return; }
           st.live = true; S.lastN = Date.now();
-          S.ar = setInterval(() => { if (gen === S.gen) readAtas().catch(() => {}); }, 3000);   /* 3.29.4: a missed token-account update can not leave the panel blind */
+          let arN = 0; S.ar = setInterval(() => { if (gen !== S.gen) return; arN++; if (Date.now() - (S.ft || 0) < 60000 || arN % 5 === 0) readAtas().catch(() => {}); }, 3000);   /* 3.29.4: a missed token-account update can not leave the panel blind; 3.29.11: every 3 s only in the minute after a trade, else every 15 s (the free node answered 403) */
           /* watchdog (3.8.3): the feed quiet for 15 s while a direct read shows the coin moved = it stopped delivering: a new socket */
           S.chk = setInterval(async () => {
             if (gen !== S.gen || !S.st || Date.now() - S.lastN < 15000) return;
@@ -1317,7 +1317,7 @@ chrome.runtime.onConnect.addListener(port => {
     S.poll = setInterval(async () => { const q = await posAll(c, S.a, S.isMint, pubs).catch(() => null); if (q && gen === S.gen) { if (q.raw !== lastRaw) { lastRaw = q.raw; for (const a of S.atas) syncSoon(a); } post(Object.assign(q, { usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, q.value_sol) : null })); } }, 1500);   /* 3.12.26: was 3 s (float / Raydium coins: PnL lagged) */
   }
   port.say = post;
-  port.fresh = async () => {   /* re-read the token account (and the wallet) right after a trade lands; again 1 s later for a lagging node */
+  port.fresh = async () => { S.ft = Date.now();   /* re-read the token account (and the wallet) right after a trade lands; again 1 s later for a lagging node */
     for (const wait of [0, 600, 900, 1500, 3000]) {   /* 3.29.4: more reads, each kept only if not older than the feed's */
       if (wait) await new Promise(r => setTimeout(r, wait));
       if (!S.st || !S.atas.length) { if (!S.st && S.a) port.resub(); return; }
