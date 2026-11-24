@@ -767,7 +767,21 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (st.locked) status('Locked: click the HAKI icon in Chrome’s toolbar, type your password once and keep “Stay unlocked” on', 'bad');
   }
   const f3 = v => { const a = Math.abs(v); return !isFinite(v) ? '–' : v === 0 ? '0' : a >= 100 ? v.toFixed(1) : a >= 10 ? v.toFixed(2) : a >= 0.01 ? v.toFixed(3) : v.toFixed(4); };
-  const showVal = v => usdView && last && last.usd ? (v < 0 ? '-$' : '$') + Math.abs(v * last.usd).toFixed(2) : f3(v);
+  /* 3.29.20 (owner: dollar values were cut in the footer): cents only under $100, whole dollars up to $9,999, then K / M */
+  const fUsd = a => a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e4 ? (a / 1e3).toFixed(1) + 'K' : a >= 100 ? Math.round(a).toLocaleString('en-US') : a.toFixed(2);
+  const showVal = v => usdView && last && last.usd ? (v < 0 ? '-$' : '$') + fUsd(Math.abs(v * last.usd)) : f3(v);
+  /* 3.29.20: a footer number that is wider than its cell gets a smaller font instead of being cut (narrow panel, big values) */
+  const fitN = e => {
+    const v = e && e.parentElement, c = v && v.parentElement; if (!c || !c.clientWidth || !e.offsetWidth) return;
+    if (!e.style.fontSize) e.dataset.fb = parseFloat(getComputedStyle(e).fontSize);
+    const fb = +e.dataset.fb, cur = parseFloat(e.style.fontSize) || fb, cs = getComputedStyle(c);
+    const av = c.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2; let o = 0, n = 0;
+    for (const k of v.children) { const w = k.offsetWidth; if (w) { n++; if (k !== e) o += w; } }
+    o += Math.max(0, n - 1) * (parseFloat(getComputedStyle(v).columnGap) || 0);
+    const nat = e.offsetWidth * fb / cur, f = nat + o <= av ? fb : Math.max(8, Math.floor(fb * (av - o) / nat * 2) / 2);
+    const t = f >= fb ? '' : f + 'px'; if (e.style.fontSize !== t) e.style.fontSize = t;
+  };
+  const fitAll = () => { for (const k of ['.pn', '.ph', '.pb', '.ps']) fitN($(k)); };
   /* 3.15.0: each sell key shows what it brings (its share of Holding); the PnL line of this position since the page opened */
   const paintSubs = h => { $$('.rs .c').forEach((b, i) => { const s = b.querySelector('small'); if (s) { const t = h > 0 && C && C.sells && SROW()[i] != null ? (SM === 'sol' ? '≈' + Math.min(100, Math.round(SROW()[i] / h * 100)) + '%' : f3(h * SROW()[i] / 100)) : ''; if (s.textContent !== t) s.textContent = t; } }); };
   const SPK = new Map();
@@ -781,7 +795,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     sv.querySelector('.spl').setAttribute('d', d); sv.querySelector('.spf').setAttribute('d', d + ' L96 28 L0 28 Z'); sv.classList.remove('no');
   }
   /* 3.20.0: the feed ticks every block; writing unchanged numbers made the page re-layout for nothing */
-  const setT = (k, t) => { const e = $(k); if (e && e.textContent !== t) e.textContent = t; };
+  const FITK = new Set(['.pn', '.ph', '.pb', '.ps']);
+  const setT = (k, t) => { const e = $(k); if (e && e.textContent !== t) { e.textContent = t; if (FITK.has(k)) fitN(e); } };
   const setC = (k, c) => { const e = $(k); if (e && e.className !== c) e.className = c; };
   function paintPos(p) {
     if (p.err) return;
@@ -790,7 +805,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     const posH = has ? '<b>' + ESC(fmt(p.ui)) + '</b> held' : 'No position'; if ($('.pos').innerHTML !== posH) $('.pos').innerHTML = posH; paintSubs(has ? +hold || 0 : 0); spkPush(p);
     $('.rs').classList.toggle('off', !has);
     setT('.ph', has ? showVal(hold || 0) : '0');
-    P.classList.toggle('nopos', !has && !x); $$('.un').forEach(e => { e.style.display = usdView && p.usd ? 'none' : ''; });
+    P.classList.toggle('nopos', !has && !x); $$('.un').forEach(e => { if (usdView && p.usd) e.style.setProperty('display', 'none', 'important'); else e.style.removeProperty('display'); });   /* 3.29.20: the SOL mark left the dollar PnL (a CSS !important kept it on) */
     $('.hero').classList.toggle('loss', !!(x && x.pnl < 0)); $('.hero').classList.toggle('flat', !x || !x.pnl);
     $('.init').disabled = busy || !(has && x && x.bought - x.sold > 0);
     if (!x) { setT('.pb', '0'); setT('.ps', '0'); setT('.pn', '+0'); setC('.pn', 'pn'); setT('.pp', '+0%'); setC('.pp', 'pp num'); $('.hero').title = 'No trades from HAKI on this coin yet'; paintSet(); return; }
@@ -975,7 +990,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     const x = last && last.pnl, h = last && last.value_sol; if (!x || !(h > 0)) return;
     const pct = Math.min(100, Math.max(1, (x.bought - x.sold) / h * 100)); trade(A, 'sell', Math.round(pct * 10) / 10);
   };
-  $('.cp').onclick = () => { usdView = !usdView; if (last) paintPos(last); };
+  $('.cp').onclick = () => { usdView = !usdView; if (last) paintPos(last); fitAll(); };
   /* Share PnL: the card window over the page (our layer), loaded once ahead of time; the data is written by the worker, then shown */
   const SHM = $('.shm'), SHF = $('.shf'), SHURL = chrome.runtime.getURL('share/share.html') + '?embed=1';
   const shLoad = () => { if (!SHF.getAttribute('src')) SHF.setAttribute('src', SHURL); };
@@ -1575,7 +1590,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     const a = pageAddr(); if (a === A) return; A = a; last = null;
     if (A && isMintPage() && !isBsc(A)) send('og', { a: A, isMint: true }).catch(() => {});
     if (C) { build(); paintSet(); refreshBal(); }   /* 3.14.1: SOL / BNB mode follows the coin */   /* 3.12.9: the OG lookup starts as the coin opens, before the button is there */
-    for (const k of ['.pb', '.ps', '.ph']) $(k).textContent = '0'; $('.pn').textContent = '+0'; $('.pn').className = 'pn'; $('.pp').textContent = '+0%'; $('.pp').className = 'pp num';
+    for (const k of ['.pb', '.ps', '.ph']) $(k).textContent = '0'; for (const k of FITK) $(k).style.fontSize = ''; $('.pn').textContent = '+0'; $('.pn').className = 'pn'; $('.pp').textContent = '+0%'; $('.pp').className = 'pp num';
     $('.pos').textContent = 'No position'; $('.rs').classList.add('off'); $('.init').disabled = true; status('');
     P.hidden = !A; watchNow();
     $('.cth').value = ''; $('.cpost').disabled = false; cMode(false); cStat(''); clearTimeout(cT); if (A) cT = setTimeout(cCheck, 600);   /* 3.14.3: Callout posts to pump.fun: every host, BSC coins too */
@@ -1592,7 +1607,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (st.cShut2) { $('.sc').classList.add('shut'); $('.ctg').setAttribute('aria-expanded', 'false'); }
     if (st.min) { P.classList.add('min'); $('.mn').innerHTML = I.max; }
     P.hidden = false; const put = () => place(...(st.at || [innerWidth - 322 * Z - 16, innerHeight - (P.offsetHeight || 360) * Z - 48])); put(); P.hidden = true;
-    new ResizeObserver(() => { const r = P.getBoundingClientRect(); if (r.width) place(r.left, r.top); }).observe(P);
+    new ResizeObserver(() => { const r = P.getBoundingClientRect(); if (r.width) { place(r.left, r.top); fitAll(); } }).observe(P);
     if (!C.wallet) status('Open HAKI Strike (toolbar icon) and add your wallet.', 'bad');
     baseAt = Date.now() + 1500; connect(); route(); setInterval(route, 300);
     refreshBal(); setInterval(() => { if (A && !busy && !document.hidden) refreshBal(); }, 30000);
