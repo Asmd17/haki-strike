@@ -366,6 +366,7 @@ const SOLX = (() => {
     let st = null; try { st = await pumpState(m, pub, url, 800); } catch (_) {}
     warmSender(); blockhash(url).catch(() => {}); feeRefresh(st ? ((PL.get(st.mint) || {}).pool || st.bc) : null, url).catch(() => {});
     if (st && st.native) { await pumpConf(url); return { native: true }; }   /* a pump.fun curve: made here in ~1 ms at the click */
+    if (qcKnown(st, m)) { await pumpConf(url).catch(() => {}); return { native: true }; }   /* 3.29.21: built at the click (Jupiter + pump.fun in one transaction) */
     if (poolOk(st)) { await ammConf(url).catch(() => {}); if (!st.live) { try { const P = await poolState(st, url); st.hpool = P; st.hpoolT = Date.now(); } catch (_) {} } return { native: true }; }   /* a PumpSwap pool: built at the click from its reserves (3.12.2: read during the hover, so the click does not wait for them) */
     let x;
     if (side === 'buy') { if (!(+o.sol > 0)) return null; x = BigInt(Math.round(+o.sol * 1e9)); }
@@ -376,7 +377,7 @@ const SOLX = (() => {
     if (rlLeft('ix') <= 5 || rlLeft('quote') <= 20) { PMISS.set(mk, 'Jupiter limit, waited'); return null; }   /* 3.12.18: quotes kept for the click too */
     const p = jupMake(side, m, x, o, pub, url, true, st && st.curve && st.curve.quote);
     const hold = { p }; PREP.set(k, hold);
-    try { const r = await p; if (PREP.get(k) === hold) PREP.set(k, r); PMISS.delete(mk); return r; } catch (e) { if (PREP.get(k) === hold) PREP.delete(k); PMISS.set(mk, 'pre-build failed: ' + String(e.message || e).slice(0, 50)); throw e; }
+    try { const r = await p; if (PREP.get(k) === hold) PREP.set(k, r); PMISS.delete(mk); return r; } catch (e) { if (PREP.get(k) === hold) PREP.delete(k); if (qcOk(st) && NOJUP.test(String(e && e.message))) { QCN.set(m, Date.now()); return { native: true }; } PMISS.set(mk, 'pre-build failed: ' + String(e.message || e).slice(0, 50)); throw e; }
   }
   /* 3.29.14 (owner 1123: "sometimes my sells do not go through"; chain, 3 days: 7 sells were sent while the previous sell of the same coin
      was still landing, sized from the balance before it, and failed with nothing left to sell - 0x1788 / pump 6023).
@@ -428,15 +429,18 @@ const SOLX = (() => {
     } else throw new Error('side must be buy or sell');
     lap.st = Date.now() - t0;
     const oo = Object.assign({}, o, { slip, tip, prio, _lap: lap, _spot: o.side === 'sell' ? spotSol(st, x) : null }), k = pkey(m, o.side, x, oo, pub), P = PREP.get(k);
+    const qc = o.native !== false && qcOk(st);
+    if (qc && (o.qc === true || qcKnown(st, m))) { PREP.delete(k); return qcTrade(oo, st, x, seed, pub, url, t0); }   /* 3.29.21: Jupiter has no route for it (o.qc: tests) */
     const miss = P ? '' : PMISS.get(pub + '|' + m + '|' + o.side) || ([...PREP.keys()].some(q => q.startsWith(pub + '|' + m + '|' + o.side + '|')) ? 'amount or fee changed' : 'not hovered long enough');   /* 3.12.4: the real reason (a failed hover build) first */
     PREP.delete(k);   /* taken at once: a second click right after builds its own transaction */
     let ready = P && (P.msg || P.raw) && Date.now() - P.t < PREP_MS ? P : null;
     if (!ready && P && P.p) { try { const r = await P.p; if (Date.now() - r.t < PREP_MS) ready = r; } catch (_) {} }   /* still being built: wait for it */
     if (ready && USED.has(ready)) ready = null; if (ready) USED.add(ready);
-    const [b, have] = await Promise.all([ready || jupMake(o.side, m, x, oo, pub, url, false, st && st.curve && st.curve.quote).catch(e => { if (e && e.two) return { two: true, q1: e.q1 }; throw e; }),
+    const [b, have] = await Promise.all([ready || jupMake(o.side, m, x, oo, pub, url, false, st && st.curve && st.curve.quote).catch(e => { if (e && e.two) return { two: true, q1: e.q1 }; if (qc && NOJUP.test(String(e && e.message))) return { qc: true }; throw e; }),
       o.side === 'buy' && o.live !== false ? (o.have != null ? o.have : (balance(pub, url).catch(() => {}), null)) : null]);   /* 3.12.2: no balance round trip on the click (an unknown balance skips the pre-check; the chain refuses a short wallet anyway) */
     if (have != null && have / 1e9 < sol + tip + prio + FEE_RESERVE) throw new Error('not enough SOL: the wallet has ' + (have / 1e9).toFixed(4) + ', this needs about ' + (sol + tip + prio + FEE_RESERVE).toFixed(4));
     lap.route = Date.now() - t0 - lap.st;
+    if (b.qc) { QCN.set(m, Date.now()); if (QCN.size > 500) QCN.clear(); return qcTrade(oo, st, x, seed, pub, url, t0); }
     if (b.two) return twoStep(o.side, m, x, Math.round(slip * 100), st.curve.quote, oo, seed, pub, url, t0, b.q1);
     let imp = (+b.q.priceImpactPct || 0) * 100;
     { const out = +b.q.outAmount, v = o.side === 'sell' ? oo._spot : (out > 0 ? spotSol(st, BigInt(b.q.outAmount)) : null);   /* 3.29.6: ours when we know the price */
@@ -482,6 +486,154 @@ const SOLX = (() => {
       const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
       Object.assign(res, { sent: false, sim_err: v.err || null, cu: v.unitsConsumed });
     } else { res.sending = sendFast(tx64, url, b.tip >= 5000 ? b.tip : 0); res.via = []; res.sent = true; }   /* 3.11.11: not waiting for the nodes' answers */
+    if (!st.live) ST.delete(st.mint + '|' + pub);
+    res.ms = Date.now() - t0; return res;
+  }
+  /* 3.29.21 (owner 1124: "no route: No routes found" on coins paired with goldcoin, a pump.fun coin that is itself paired with an xStock):
+     Jupiter does not trade a pump.fun curve paired with such a coin ("not tradable"). Those curves are traded here, in ONE transaction:
+     buy = Jupiter SOL -> quote coin, then pump.fun buy_exact_quote_in_v3 with it; sell = pump.fun sell_v3 into the quote coin, then Jupiter
+     quote coin -> SOL spending exactly what the sell gave (Jupiter's token ledger). A buy spends 98 % of what the first leg is quoted to give
+     plus up to 5 % of that coin already in the wallet; if the first leg gives less, the whole trade fails (nothing spent but the fee).
+     Used only when Jupiter has no route for the coin itself; the same loss guards as every other route (price impact, Exact, sell value). */
+  const QCN = new Map(), QBB = new Map(), NOJUP = /No routes found|NO_ROUTES_FOUND|COULD_NOT_FIND_ANY_ROUTE|not tradable|TOKEN_NOT_TRADABLE/i;
+  const qcOk = st => !!(st && st.curve && !st.curve.complete && !st.curve.cashback && !st.curve.mayhem && st.curve.quote && st.curve.quote !== WSOL);
+  const qcKnown = (st, m) => qcOk(st) && QCN.get(m) > Date.now() - 600000;
+  async function qcTrade(o, st, x, seed, pub, url, t0) {
+    const c = st.curve, qm = c.quote, slipBps = Math.round((+o.slip || 20) * 100), slip = BigInt(slipBps), lap = o._lap || {};
+    const [conf, [mi], rate] = await Promise.all([pumpConf(url), accs([qm], url), quoteRate(qm).catch(() => null)]);
+    if (!mi || !TOKEN_PROGS.includes(mi.owner)) throw new Error('quote coin not found');
+    const qp = mi.owner, fee = feeOf(conf, c);
+    const [abc, qbc, qus, uva, ea] = await Promise.all([ata(st.bc, st.prog, st.mint), ata(st.bc, qp, qm), ata(pub, qp, qm),
+      pda([enc('user_volume_accumulator'), b58d(pub)], PUMP), pda([enc('__event_authority')], PUMP)]);
+    /* the buyback part of the fee goes to a buyback wallet's account for the quote coin, which must exist: one that does, else it is made */
+    let bb = QBB.get(qm), mkbb = null;
+    if (!bb) { const L = await Promise.all(conf.bb.map(w => ata(w, qp, qm))), A = await accs(L, url), i = A.findIndex(a => a && a.data.length >= 72);
+      if (i >= 0) { bb = L[i]; QBB.set(qm, bb); } else { bb = L[0]; mkbb = conf.bb[0]; } }
+    const keys = [[conf.gl, 0, 0], [st.mint, 0, 0], [qm, 0, 0], [st.prog, 0, 0], [qp, 0, 0], [st.bc, 0, 1], [abc, 0, 1], [qbc, 0, 1], [pub, 1, 1], [st.ata, 0, 1],
+      [qus, 0, 1], [uva, 0, 1], [conf.fc, 0, 0], [bb, 0, 1], [SYS, 0, 0], [ea, 0, 0], [PUMP, 0, 0]].map(([k, sg, w]) => [k, !!sg, !!w]);
+    const mkAta = (owner, a, mint, prog) => ({ prog: ATAP, keys: [[pub, true, true], [a, false, true], [owner, false, false], [mint, false, false], [SYS, false, false], [prog, false, false]], data: Uint8Array.of(1) });
+    const conv = j => ({ prog: j.programId, keys: j.accounts.map(a => [a.pubkey, !!a.isSigner, !!a.isWritable]), data: unb64(j.data) });
+    const spotQ = Number(c.vQ) / Number(c.vT);   /* quote units per token unit, before this trade */
+    let tip = Math.round(Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)) * 1e9), prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
+    const make = async (j, before, mid, after, cu) => {   /* our steps + one Jupiter leg -> a v0 message */
+      const jx = [...(j.setupInstructions || []).map(conv), conv(j.swapInstruction), ...(j.cleanupInstruction ? [conv(j.cleanupInstruction)] : []), ...(j.otherInstructions || []).map(conv)];
+      await vetRoute(jx.map(z => ({ prog: z.prog, keys: z.keys.map(k => k[0]), data: z.data })), pub);
+      if (j.tokenLedgerInstruction) await vetRoute([j.tokenLedgerInstruction].map(conv).map(z => ({ prog: z.prog, keys: z.keys.map(k => k[0]), data: z.data })), pub);
+      ({ tip, prio } = smart(o, st.bc, cu, tip, prio, url));
+      const ixs = [{ prog: CBP, keys: [], data: cat(Uint8Array.of(2), le(cu, 4)) }, { prog: CBP, keys: [], data: cat(Uint8Array.of(3), le(Math.floor(prio * 1e15 / cu), 8)) }, ...before];
+      if (mid) ixs.push(...mid(jx)); else ixs.push(...jx);
+      ixs.push(...(after || []));
+      if (tip > 0) ixs.push({ prog: SYS, keys: [[pub, true, true], [HTIP[Math.floor(Math.random() * HTIP.length)], false, true]], data: cat(le(2, 4), le(tip, 8)) });
+      for (const ix of ixs) for (const k of ix.keys) if (k[1] && k[0] !== pub) throw new Error('the route asks for another signer');
+      const list = [...new Set(j.addressLookupTableAddresses || [])], T = j.addressesByLookupTableAddress || {}, miss = list.filter(a => !T[a] && !ALT.has(a));
+      if (miss.length) { const rr = await accs(miss, url); miss.forEach((a, i) => { const d = rr[i] && rr[i].data; if (!d) return; const ks = []; for (let z = 56; z + 32 <= d.length; z += 32) ks.push(b58e(d.slice(z, z + 32))); ALT.set(a, ks); }); }
+      const msg = compileV0(pub, ixs, await blockhash(url), list.map(a => [a, T[a] || ALT.get(a)]).filter(t => t[1]));
+      if (65 + msg.length > 1232) throw new Error('route too big for one transaction (' + (65 + msg.length) + ' bytes)');
+      return msg;
+    };
+    /* a route squeezed to fit one transaction can go through a dead pool (seen 1124: SOL -> goldcoin at 40 accounts = 6 % of the free
+       route). Only routes within 5 % of the free one are used in one transaction; otherwise two transactions (3.8.6 style): the free
+       route on its own, then pump.fun with exactly what arrived (buy), or pump.fun first, then the free route for exactly what arrived (sell). */
+    const tip0 = tip, shutIx = { prog: st.prog, keys: [[st.ata, false, true], [pub, false, true], [pub, true, false]], data: Uint8Array.of(9) };
+    const pumpMsg = async (body, cu) => { tip = tip0; ({ tip, prio } = smart(o, st.bc, cu, tip, prio, url));
+      const ixs = [...cbIxs(cu, prio, 0), ...body]; if (tip > 0) ixs.push({ prog: SYS, keys: [[pub, true, true], [HTIP[Math.floor(Math.random() * HTIP.length)], false, true]], data: cat(le(2, 4), le(tip, 8)) });
+      return compile(pub, ixs, await blockhash(url)); };
+    const SIZE = /too big|too many accounts/;
+    let msg = null, q = null, out, impact, err = null, two = null, sellIx = null, shut = false;
+    if (o.side === 'buy') {
+      const [held, L, full] = await Promise.all([quoteHeld(pub, qm, url).catch(() => 0n), solLegs(WSOL, qm, String(x), slipBps).catch(() => []), quote(WSOL, qm, String(x), slipBps).catch(() => null)]);
+      const best = [full, ...L].filter(Boolean).reduce((a, z) => BigInt(z.outAmount) > a ? BigInt(z.outAmount) : a, 0n);
+      if (best <= 0n) throw new Error('no route: No routes found between SOL and the quote coin');
+      for (const q1 of L.filter(z => BigInt(z.outAmount) * 100n >= best * 95n).slice(0, 4)) {
+        try {
+          const got = BigInt(q1.outAmount), extra = held < got * 5n / 100n ? held : got * 5n / 100n, spend = got * 98n / 100n + extra;
+          out = buyOut(c, fee, spend); if (out <= 0n) throw new Error('the curve has no tokens left');
+          const ix = { prog: PUMP, keys, data: cat(D_BUY, le(spend, 8), le(out * (10000n - slip) / 10000n, 8), Uint8Array.of(0)) };
+          const j = await jupLeg(q1, pub, false);
+          const cu = Math.min(1400000, (+j.computeUnitLimit || 300000) + CU_T.buy + (mkbb ? 25000 : 0) + 2000 + uq());
+          msg = await make(j, mkbb ? [mkAta(mkbb, bb, qm, qp)] : [], null, [mkAta(pub, st.ata, st.mint, st.prog), ix], cu);
+          q = { inAmount: String(x), outAmount: String(out), routePlan: q1.routePlan || [], got }; break;
+        } catch (e) { if (e.vet) throw e; err = e; if (!SIZE.test(String(e.message))) break; }
+      }
+      if (!msg) {
+        if (err && !SIZE.test(String(err.message))) throw err;
+        two = full && BigInt(full.outAmount) === best ? full : L[0];
+        out = buyOut(c, fee, BigInt(two.outAmount)); if (out <= 0n) throw new Error('the curve has no tokens left');
+        q = { inAmount: String(x), outAmount: String(out), routePlan: two.routePlan || [], got: BigInt(two.outAmount) };
+      }
+      const lr = rate > 0 ? rate : Number(x) / Number(q.got);   /* no price for the quote coin: the first leg's own rate */
+      impact = Math.max(0, (1 - Number(out) * spotQ * lr / Number(x)) * 100);
+    } else {
+      const amt = x, qOut = sellOut(c, fee, amt); if (qOut <= 0n) throw new Error('this sell gives nothing');
+      sellIx = { prog: PUMP, keys, data: cat(D_SELL, le(amt, 8), le(qOut * (10000n - slip) / 10000n, 8)) };
+      shut = +o.pct >= 100 && amt === st.raw && !st.flying;
+      const full = await quote(qm, WSOL, String(qOut), slipBps).catch(() => null), fo = full ? BigInt(full.outAmount) : 0n;
+      if (fo <= 0n) throw new Error('no route: No routes found between the quote coin and SOL');
+      for (const cap of [48, 40, 32]) {
+        try {
+          const q2 = await quote(qm, WSOL, String(qOut), slipBps, cap); if (BigInt(q2.outAmount) * 100n < fo * 95n) continue;
+          const j = await jupLeg(q2, pub, false, false, true), led = conv(j.tokenLedgerInstruction);
+          const cu = Math.min(1400000, 300000 + CU_T.sell + 25000 + (mkbb ? 25000 : 0) + (shut ? 6000 : 0) + 2000 + uq());
+          msg = await make(j, [...(mkbb ? [mkAta(mkbb, bb, qm, qp)] : []), mkAta(pub, qus, qm, qp)], jx => [led, sellIx, ...(shut ? [shutIx] : []), ...jx], [], cu);
+          q = { inAmount: String(amt), outAmount: q2.outAmount, routePlan: q2.routePlan || [] }; out = BigInt(q2.outAmount); break;
+        } catch (e) { if (e.vet) throw e; err = e; }
+      }
+      if (!msg) { two = full; q = { inAmount: String(amt), outAmount: full.outAmount, routePlan: full.routePlan || [] }; out = fo; }
+      const v = spotSol(st, amt), own = v > 0 ? (1 - Number(out) / 1e9 / v) * 100 : null; impact = own != null && isFinite(own) ? Math.max(0, own) : 0;
+    }
+    if (impact > MAX_IMPACT) throw new Error(o.side === 'sell' ? 'this route would lose ' + impact.toFixed(0) + ' % of the position (only ' + (Number(out) / 1e9).toFixed(4) + ' SOL back): not sold' : 'price impact ' + impact.toFixed(0) + ' % is too high');
+    if (o.exact && +o.mcClick > 0 && st.supply > 0n && +q.inAmount > 0 && +q.outAmount > 0) {   /* 3.12.22 Exact, as on every other route */
+      const qi = +q.inAmount, qo = +q.outAmount, mcq = (o.side === 'sell' ? qo / qi : qi / qo) * Number(st.supply) / 1e9;
+      const mv = o.side === 'buy' ? mcq / o.mcClick - 1 : 1 - mcq / o.mcClick, allow = slipBps / 10000 + impact / 100 + 0.015;
+      if (mv > allow) { const u = PX.v > 0 ? PX.v : 0, f = v => u ? '$' + (v * u >= 1e6 ? (v * u / 1e6).toFixed(2) + 'M' : (v * u / 1e3).toFixed(1) + 'K') : v.toFixed(0) + ' SOL';
+        throw new Error('Exact: the price moved ' + (mv * 100).toFixed(1) + '% since your click (MC ' + f(+o.mcClick) + ' → ' + f(mcq) + '), not ' + (o.side === 'buy' ? 'bought' : 'sold') + '. Click again at the new price or turn Exact off'); }
+    }
+    lap.route = Date.now() - t0 - (lap.st || 0); lap.legs = 2;
+    const labels = (q.routePlan || []).map(r => (r.swapInfo || {}).label), route = o.side === 'buy' ? [...labels, 'pump.fun'] : ['pump.fun', ...labels];
+    const res = { ok: true, side: o.side, mint: st.mint, amt: o.side === 'sell' ? String(x) : undefined, impact: +impact.toFixed(2), prio, pre: false, miss: '', lap, fast: true, route, qcurve: true };
+    if (st.supply > 0n) { const qi = +q.inAmount, qo = +q.outAmount, px = o.side === 'sell' ? qo / qi : qi / qo; if (px > 0 && isFinite(px)) { res.mc0 = px * Number(st.supply) / 1e9; res.sup = st.supply.toString(); res.mcq = true; } }
+    if (two) {
+      const qh = async () => { const [a] = await accs([qus], url); return a && a.data.length >= 72 ? u64(a.data, 64) : 0n; };
+      let s1;
+      if (o.side === 'buy') { const b1 = await jupIx(two, pub, o, url, false); s1 = { msg: b1.msg, tip: b1.tip }; }
+      else s1 = { msg: await pumpMsg([...(mkbb ? [mkAta(mkbb, bb, qm, qp)] : []), mkAta(pub, qus, qm, qp), sellIx, ...(shut ? [shutIx] : [])], CU_T.sell + 25000 + (mkbb ? 25000 : 0) + (shut ? 6000 : 0) + uq()), tip };
+      const [before, sg1] = await Promise.all([qh(), sign(seed, s1.msg)]), tx1 = b64(cat(Uint8Array.of(1), sg1, s1.msg)), sig1 = b58e(sg1);
+      res.steps = 2; lap.sign = Date.now() - t0 - (lap.st || 0) - lap.route;
+      if (o.live === false) {   /* test mode: only the first step can be simulated (the second spends what it gives) */
+        const v = ((await rpc('simulateTransaction', [tx1, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
+        return Object.assign(res, { sig: sig1, sent: false, sim_err: v.err || null, cu: v.unitsConsumed, tip: s1.tip / 1e9, tx64: tx1, ms: Date.now() - t0 });
+      }
+      await sendFast(tx1, url, s1.tip >= 5000 ? s1.tip : 0);
+      let got = 0n;
+      for (let i = 0; i < 160 && got <= 0n; i++) {   /* up to ~24 s */
+        await sleep(150);
+        got = (await qh().catch(() => before)) - before;
+        if (got <= 0n && i % 6 === 5) { const s = await txStatus(sig1, url).catch(() => ({ st: 'pending' })); if (s.st === 'failed') throw new Error('step 1 of 2 failed (' + JSON.stringify(s.err).slice(0, 60) + '): nothing was swapped'); }
+      }
+      if (got <= 0n) throw new Error('step 1 of 2 did not land in time: check the wallet for the quote coin');
+      try {
+        let msg2, tip2;
+        if (o.side === 'buy') {
+          let c2 = c; try { const [cv] = await accs([st.bc], url); if (cv && cv.owner === PUMP && cv.data.length >= 81) c2 = curveOf(cv.data); } catch (_) {}
+          const o2 = buyOut(c2, feeOf(conf, c2), got); if (o2 <= 0n) throw new Error('the curve has no tokens left');
+          msg2 = await pumpMsg([mkAta(pub, st.ata, st.mint, st.prog), { prog: PUMP, keys, data: cat(D_BUY, le(got, 8), le(o2 * (10000n - slip) / 10000n, 8), Uint8Array.of(0)) }], CU_T.buy + uq()); tip2 = tip;
+        } else {
+          const q2 = await quote(qm, WSOL, got.toString(), slipBps), exp = Number(got) * (rate > 0 ? rate : Number(out) / Number(BigInt(two.inAmount)));
+          if (exp > 0 && Number(q2.outAmount) < exp * (1 - MAX_IMPACT / 100)) throw new Error('its route gives only ' + (Number(q2.outAmount) / 1e9).toFixed(4) + ' SOL for ' + (exp / 1e9).toFixed(4) + ' SOL of the quote coin, not sent');
+          const b2 = await jupIx(q2, pub, o, url, false); msg2 = b2.msg; tip2 = b2.tip;
+        }
+        const sg2 = await sign(seed, msg2), tx2 = b64(cat(Uint8Array.of(1), sg2, msg2)), via = await sendFast(tx2, url, tip2 >= 5000 ? tip2 : 0);
+        if (!st.live) ST.delete(st.mint + '|' + pub);
+        return Object.assign(res, { sig: b58e(sg2), sig1, sent: true, via, tx64: tx2, tip: tip2 / 1e9, tip1: s1.tip / 1e9, ms: Date.now() - t0 });
+      } catch (e) { throw new Error('step 2 of 2 failed: ' + String(e.message || e).slice(0, 80) + '. The quote coin from step 1 is in your wallet'); }
+    }
+    const sg = await sign(seed, msg), tx64 = b64(cat(Uint8Array.of(1), sg, msg));
+    lap.sign = Date.now() - t0 - (lap.st || 0) - lap.route;
+    Object.assign(res, { sig: b58e(sg), tip: tip / 1e9, tx64 });
+    if (o.live === false) {
+      const v = ((await rpc('simulateTransaction', [tx64, { encoding: 'base64', sigVerify: true, commitment: 'processed' }], url)) || {}).value || {};
+      Object.assign(res, { sent: false, sim_err: v.err || null, cu: v.unitsConsumed });
+    } else { res.sending = sendFast(tx64, url, tip >= 5000 ? tip : 0); res.via = []; res.sent = true; }
     if (!st.live) ST.delete(st.mint + '|' + pub);
     res.ms = Date.now() - t0; return res;
   }
