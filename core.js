@@ -208,7 +208,57 @@ const SOLX = (() => {
     if (!j || !j.swapTransaction) throw new Error('could not build the swap: ' + String((j && (j.error || j.message)) || r.status).slice(0, 120));
     const raw = unb64(j.swapTransaction); await vetRoute(txIxs(raw), pub); return raw;   /* 3.21.5: the same check as our own routes */
   }
+  /* 3.29.18 sandwich validators (owner 1124, sandwiched on 3pxmdM: validator ALp2Gd... put an 18.39 SOL buy of BphjAw...T85 at the end of
+     its slot 473348380, his 1 SOL buy 5th in 473348381, the T85 sell 7th in 473348382 = all three slots its own; 10.47M tokens for 1 SOL
+     where ~21M was the price): a validator sees every transaction sent to it while it makes its 4 slots (1.6 s). A trade is not sent
+     while one on the block list makes this slot or the next two: it waits them out (100 ms steps, at most 2.4 s in practice, never over 4 s), then goes to the next
+     validator. A resend is skipped in those slots. The list = ALp2Gd... + every validator caught sandwiching one of your trades
+     (sandwichOf, checked after each trade lands). Off: Settings, Speed and fees, Skip sandwich validators. */
+  const MEV = { on: true, bad: new Set(['ALp2GdA1eJV8vZHMHazCtTxNXe3BLUSco9LDASgjDs8R']), lead: null, slot: 0, slotT: 0, slot2: 0, slot2T: 0, busy: false }, MEVH = new Map();
+  const mevSlot = s => { if (s > 0) { MEV.slot = s; MEV.slotT = Date.now(); } };
+  const slotEst = () => { const n = Date.now(); if (MEV.slot && n - MEV.slotT < 5000) return MEV.slot + Math.floor((n - MEV.slotT) / 400); if (MEV.slot2 && n - MEV.slot2T < 15000) return MEV.slot2 + Math.floor((n - MEV.slot2T) / 400); return 0; };
+  const leaderAt = s => { const L = MEV.lead; return L && s >= L.start && s < L.start + L.list.length ? L.list[s - L.start] : null; };
+  const badIn = (s, n) => { if (!s) return null; for (let i = 0; i < n; i++) { const l = leaderAt(s + i); if (l && MEV.bad.has(l)) return l; } return null; };
+  const mevBadNow = () => MEV.on ? badIn(slotEst(), 3) : null;   /* the slot now and the next two (a trade lands in 1-2 slots; the feed can be one behind) */
+  async function mevLeaders(url) {   /* the validators of the next ~13 minutes, one call; asked again when it runs short */
+    const s0 = slotEst(), L = MEV.lead;
+    if (MEV.busy || (L && s0 && s0 + 300 < L.start + L.list.length)) return;
+    MEV.busy = true;
+    try { const s = await rpc('getSlot', [{ commitment: 'processed' }], url, true); MEV.slot2 = s; MEV.slot2T = Date.now();
+      let list = null; for (const n of [2000, 400]) { list = await rpc('getSlotLeaders', [s, n], url, true).catch(() => null); if (Array.isArray(list) && list.length) break; }
+      if (Array.isArray(list) && list.length) MEV.lead = { start: s, list, t: Date.now() }; }
+    finally { MEV.busy = false; }
+  }
+  async function mevWait() {
+    if (!MEV.on || !MEV.bad.size || !MEV.lead) return null;
+    const t0 = Date.now(); let who = null;
+    for (;;) { const b = badIn(slotEst(), 3); if (!b) break; who = b; if (Date.now() - t0 > 4000) break; await sleep(100); }
+    return who ? { ms: Date.now() - t0, who } : null;
+  }
+  const sigOf = tx64 => { try { const b = unb64(tx64); return b58e(b.slice(1, 65)); } catch (_) { return ''; } };
+  async function mevGate(tx64) { const h = await mevWait(); if (h) { const g = sigOf(tx64); if (g) { MEVH.set(g, h); if (MEVH.size > 200) MEVH.delete(MEVH.keys().next().value); } } return h; }
+  /* after a trade landed: the same wallet traded this coin the same way right before it and the other way right after it, all in the slots
+     of one validator = a sandwich; that validator is returned (and goes on the list) */
+  async function sandwichOf(sig, mint, side, own, url) {
+    const st = (((await rpc('getSignatureStatuses', [[sig], { searchTransactionHistory: true }], url, true)) || {}).value || [])[0], slot = st && st.slot; if (!slot) return null;
+    const lo = slot - (slot % 4), hi = lo + 3, near = s => !s.err && s.slot >= lo && s.slot <= hi;
+    const [B0, A0] = await Promise.all([rpc('getSignaturesForAddress', [mint, { before: sig, limit: 6 }], url), rpc('getSignaturesForAddress', [mint, { until: sig, limit: 300 }], url)]);
+    const B = (B0 || []).filter(near).slice(0, 4), Af = (A0 || []).filter(near).slice(-8);
+    if (!B.length || !Af.length) return null;
+    const who = async s => { const t = await rpc('getTransaction', [s.signature, { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 1 }], url).catch(() => null); if (!t || !t.meta) return null;
+      const payer = ((t.transaction.message.accountKeys || [])[0] || {}).pubkey; if (!payer || own.has(payer)) return null;
+      let d = 0n; for (const b of t.meta.postTokenBalances || []) if (b.mint === mint && b.owner === payer) d += BigInt(b.uiTokenAmount.amount);
+      for (const b of t.meta.preTokenBalances || []) if (b.mint === mint && b.owner === payer) d -= BigInt(b.uiTokenAmount.amount);
+      return d === 0n ? null : { payer, buy: d > 0n }; };
+    const ours = side === 'buy', pre = (await Promise.all(B.map(who))).filter(x => x && x.buy === ours);
+    if (!pre.length) return null;
+    const post = (await Promise.all(Af.map(who))).filter(x => x && x.buy !== ours);
+    const hit = pre.find(p => post.some(q => q.payer === p.payer)); if (!hit) return null;
+    const [leader] = (await rpc('getSlotLeaders', [slot, 1], url, true)) || []; if (!leader) return null;
+    return { leader, attacker: hit.payer, slot };
+  }
   async function sendAll(tx64, url) {   /* the same signed transaction to Jito and to the node at once: ok when either took it */
+    await mevGate(tx64);
     const one = async (u, params) => { try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params }) }); const j = await r.json(); return ['result' in j, u, JSON.stringify(j.error || '').slice(0, 100)]; } catch (e) { return [false, u, String(e).slice(0, 100)]; } };
     const rs = await Promise.all([one(JITO, [tx64, { encoding: 'base64' }]), one(url || RPC, [tx64, { encoding: 'base64', skipPreflight: true, maxRetries: 3 }])]);
     if (!rs.some(x => x[0])) throw new Error('no node took it: ' + rs.map(x => x[2]).join('; '));
@@ -822,6 +872,7 @@ const SOLX = (() => {
   const laneOk = u => { const x = LANE.get(u); return !x || x.until < Date.now(); };
   const laneNote = (u, ok) => { const x = LANE.get(u) || { bad: 0, until: 0 }; if (ok) { x.bad = 0; x.until = 0; } else if (++x.bad >= 3) { x.until = Date.now() + 120000; x.bad = 0; } LANE.set(u, x); };
   async function sendFast(tx64, url, sender, resend) {   /* Helius Sender (tip inside) + the node, at once; ok when either took it */
+    if (resend) { if (mevBadNow()) throw new Error('held: a sandwich validator makes these slots'); } else await mevGate(tx64);   /* 3.29.18 */
     const one0 = async (u, params) => { try { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params }) }); const j = await r.json(); return ['result' in j, u, JSON.stringify(j.error || '').slice(0, 100)]; } catch (e) { return [false, u, String(e).slice(0, 100)]; } };
     const one = (u, params) => one0(u, params).then(x => { laneNote(u.split('?')[0], x[0]); return x; });
     /* 3.17.0: sender = the tip in lamports (true = old callers). Helius Sender's default lanes take tips from 0.001 SOL; a smaller tip goes
@@ -1473,7 +1524,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { paySol, RG, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64 };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

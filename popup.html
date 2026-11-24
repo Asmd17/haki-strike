@@ -347,6 +347,7 @@ html.win .bar{left:216px;padding:12px 40px}
   <div class="sh"><h2>Your speed</h2><span class="n" id="spdN" style="margin-left:auto;font-size:12px"></span></div>
   <div class="cd">
    <div class="spg"><div><span>Click to sent</span><b id="spdC">–</b></div><div><span>Sent to landed</span><b id="spdL">–</b></div><div><span>In the next block</span><b id="spdB">–</b></div><div><span>Saved on fees</span><b id="spdS">–</b></div></div>
+   <div class="row"><span class="l"><b>Skip sandwich validators</b><span>A trade is not sent while a validator caught sandwiching makes the slots: it waits them out (at most ~2.4 s, only in that validator's slots). Every trade is checked after it lands; a validator that sandwiched it goes on the list</span></span><span class="ctl"><input id="mevGuard" type="checkbox" aria-label="Skip sandwich validators"></span></div>
    <div class="row"><span class="l"><b>Self-tuning tip</b><span id="spdT">While your trades land in the next block, the tip and priority fee are eased down under your preset; slower landings put them back up</span></span><span class="ctl"><input id="autoSpeed" type="checkbox" aria-label="Self-tuning tip"></span></div>
   </div>
  </section>

@@ -35,7 +35,7 @@ chrome.runtime.onInstalled.addListener(async d => {
   } catch (_) {}
 });
 const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
-const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
+const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
   cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
@@ -227,6 +227,7 @@ async function cfg() {
   const c = Object.assign({}, DEF, await chrome.storage.local.get(DEF));
   c.cTexts = (Array.isArray(c.cTexts) ? c.cTexts : []).filter(t => t && t !== 'Looks good, aiming for 2x');   /* the old built-in sample text is not yours: dropped */
   SOLX.CONF.jupKey = String(c.jupKey || '').trim();
+  SOLX.MEV.on = c.mevGuard !== false;   /* 3.29.18 */
   /* P1 / P2 / P3 like HAKI: slippage, priority fee, tip each; an older single setting becomes P1 */
   /* 3.20.5 (owner: "faster"): P1's old default tip 0.0003 SOL only reached Helius' SWQOS lane; from 0.001 it goes to Jito and SWQOS at once.
      Once: a P1 still on the old default 0.0003 moves to 0.001 (a tip someone set themselves stays) */
@@ -374,6 +375,7 @@ async function book(c, pub0, only) {
       let n = false; if (!L.some(y => y.sig === sig)) { L.push(e); L.sort((a, b) => a.t - b.t); if (L.length > 300) L.splice(0, L.length - 300); await chrome.storage.local.set({ led }); n = true; }
       delete q[sig]; await chrome.storage.session.set({ pend: q }); return n; });
     if (added && e.side === 'buy') autoCallout(c, p.mint).catch(() => {});
+    if (added) setTimeout(() => { mevCheck(c, sig, p.mint, e.side).catch(() => {}); }, 3000);   /* 3.29.18: the back-run lands within the validator's 1.6 s */
   }
   if (ch) liveLedger();
   return ch;
@@ -1057,6 +1059,7 @@ async function handle(m) {
     const L = await ledOf(p.mint, pubs);
     return Object.assign(p, { usd, pnl: L.length ? SOLX.pnlOf(L, p.value_sol) : null });
   }
+  if (m.op === 'mevHeld') return SOLX.mevHeld(a.sig) || {};
   if (m.op === 'tx') {
     const hit = SIGS.get(a.sig); let r;
     if (hit && hit.err && hit.err.send) { RB.delete(a.sig); return { st: 'failed', why: 'no node took it: ' + hit.err.send.replace(/^no node took it: /, '') }; }
@@ -1168,7 +1171,18 @@ async function sigWatch(c, sig) {
   const r = await wsCall(c, 'signatureSubscribe', [sig, { commitment: 'processed' }]); if (r.result != null) LIVE.sigs.set(r.result, sig);
 }
 /* while a coin is open in the panel: keep the TLS connection to Helius Sender warm, so a click does not pay the handshake */
-setInterval(() => { if (LIVE.ports.size) { SOLX.warmSender(); SOLX.feeRefresh(null).catch(() => {}); } }, 15000);
+setInterval(() => { if (LIVE.ports.size) { SOLX.warmSender(); SOLX.feeRefresh(null).catch(() => {}); cfg().then(c => SOLX.mevLeaders(rpcUrl(c))).catch(() => {}); } }, 15000);
+/* 3.29.18 sandwich validators: the list kept in storage ('mevBad'), the seed is in core.js */
+chrome.storage.local.get({ mevBad: {} }).then(o => { for (const l of Object.keys(o.mevBad || {})) SOLX.mevBad(l); }).catch(() => {});
+async function mevCheck(c, sig, mint, side) {
+  if (c.mevGuard === false || !mint || /^0x/i.test(mint)) return;
+  const own = new Set((await walletsAll()).map(w => w.pub));
+  const r = await SOLX.sandwichOf(sig, mint, side, own, rpcUrl(c)).catch(() => null); if (!r) return;
+  const known = SOLX.MEV.bad.has(r.leader); SOLX.mevBad(r.leader);
+  await MUT(async () => { const { mevBad = {} } = await chrome.storage.local.get({ mevBad: {} }); mevBad[r.leader] = { t: Date.now(), by: r.attacker, sig, mint }; await chrome.storage.local.set({ mevBad }); });
+  const msg = 'Sandwiched: validator ' + r.leader.slice(0, 6) + '… put a trade of ' + r.attacker.slice(0, 6) + '… right before yours and right after it' + (known ? ' (it was already on the list)' : '. It is on the block list now: your trades wait out its slots');
+  for (const p of LIVE.ports) p.say({ mev: msg });
+}
 const wsUrl = c => { const u = rpcUrl(c); return u ? u.replace(/^https:/, 'wss:') : 'wss://solana-rpc.publicnode.com'; };
 function wsOpen(c) {
   if (LIVE.ws && LIVE.ws.readyState <= 1) return LIVE.ready;
@@ -1185,7 +1199,7 @@ function wsOpen(c) {
     LIVE.at = Date.now(); let j; try { j = JSON.parse(e.data); } catch (_) { return; }
     if (j.id != null && LIVE.wait.has(j.id)) { LIVE.wait.get(j.id)(j); LIVE.wait.delete(j.id); return; }
     if (j.method === 'accountNotification') { const f = LIVE.subs.get(j.params.subscription); if (f) f(j.params.result.value, ((j.params.result || {}).context || {}).slot || 0); }   /* 3.29.4: + the slot it is from */
-    if (j.method === 'slotNotification') { SLOT.v = (j.params.result || {}).slot || SLOT.v; SLOT.t = Date.now(); return; }
+    if (j.method === 'slotNotification') { SLOT.v = (j.params.result || {}).slot || SLOT.v; SLOT.t = Date.now(); SOLX.mevSlot(SLOT.v); return; }
     if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { landSeen(s, ((j.params.result || {}).context || {}).slot, ((j.params.result || {}).value || {}).err); LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
       for (const p of LIVE.ports) try { p.postMessage({ sigDone: s }); } catch (_) {} } }   /* 3.20.5: the panel hears it at once (was: its next 120 ms ask) */
   };
@@ -1229,6 +1243,7 @@ chrome.runtime.onConnect.addListener(port => {
   };
   async function start(gen) {
     const c = S.c = await cfg(), SW = await selected(), b = SW[0]; if (!b || !S.a) return;
+    SOLX.mevLeaders(rpcUrl(c)).catch(() => {});   /* 3.29.18 */
     const pubs = SW.map(w => w.pub); S.pubs = pubs;
     await book(c, b.pub).catch(() => {});
     const bals = new Map(pubs.filter(p => BALS.has(p)).map(p => [p, BALS.get(p).v]));   /* SOL of the trading wallets, added up (last reads to start) */

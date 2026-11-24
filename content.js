@@ -704,6 +704,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   function connect() {
     try { port = chrome.runtime.connect({ name: 'live' }); } catch (_) { port = null; return; }
     port.onMessage.addListener(m => { if (!m) return; if (m.sigDone) { const f = SIGW.get(m.sigDone); if (f) f(); return; }
+      if (m.mev) { status(m.mev, 'bad'); return; }   /* 3.29.18 */
       if (m.snipe) { const z = m.snipe; status(z.msg, z.st === 'sent' || z.st === 'sim' || z.st === 'sold' ? 'ok' : z.st === 'error' ? 'bad' : ''); if (z.st === 'sent') window.hkSound('buy'); if (z.st === 'sold') window.hkSound('sell'); if (z.st !== 'armed') { SNP.delete(z.mint); snpPaint(); } return; } if (m.upd) showUpd(m.upd); if (m.auto) autoNews(m.auto); if (m.bal != null && !PAPER) { bal = m.bal; paintBal(); } if (m.callout) { status('Auto callout: ' + m.callout.text, m.callout.ok ? 'ok' : 'bad'); cCheck(); } if ((m.mint || m.raw != null) && !PAPER) paintPos(m); });
     port.onDisconnect.addListener(() => { port = null; setTimeout(() => { connect(); watchNow(); }, 600); });
   }
@@ -832,7 +833,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   async function watch(sig, label, t0, rr) {
     const r = await watch1(sig, x => status(label + ': ' + x.why + ', sent again' + (x.why.includes('slippage') ? ' with ' + x.slip + '%' : '') + '…'));
     if (r.ok) {
-      const msg = label + ' landed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s' + (rr && rr.ms != null ? ' (sent in ' + rr.ms + ' ms' + (rr.pre ? ', ready before the click' : rr.miss ? ', not ready: ' + rr.miss : '') + lapTxt(rr) + ')' : ''); status(msg, 'ok'); refreshBal(); window.hkSound(/^Sell/.test(label) ? 'sell' : 'buy');
+      const hd = await send('mevHeld', { sig: r.sig }), held = hd && hd.ms > 50 ? ' · held ' + (hd.ms / 1000).toFixed(1) + ' s: sandwich validator ' + String(hd.who).slice(0, 6) + '… was making the slots' : '';   /* 3.29.18 */
+      const msg = label + ' landed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s' + held + (rr && rr.ms != null ? ' (sent in ' + rr.ms + ' ms' + (rr.pre ? ', ready before the click' : rr.miss ? ', not ready: ' + rr.miss : '') + lapTxt(rr) + ')' : ''); status(msg, 'ok'); refreshBal(); window.hkSound(/^Sell/.test(label) ? 'sell' : 'buy');
       if (/^Buy/.test(label)) { const a0 = A; setTimeout(() => { if (A === a0 && !PAPER && !(last && +last.raw > 0)) watchNow(); }, 3000); }   /* 3.29.4 */
       if (rr) fillNote(rr, r.sig).then(n => { if (n && S.title === msg) status(msg + n, 'ok'); }).catch(() => {});
     }
