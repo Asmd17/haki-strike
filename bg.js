@@ -375,7 +375,7 @@ async function book(c, pub0, only) {
       let n = false; if (!L.some(y => y.sig === sig)) { L.push(e); L.sort((a, b) => a.t - b.t); if (L.length > 300) L.splice(0, L.length - 300); await chrome.storage.local.set({ led }); n = true; }
       delete q[sig]; await chrome.storage.session.set({ pend: q }); return n; });
     if (added && e.side === 'buy') autoCallout(c, p.mint).catch(() => {});
-    if (added) setTimeout(() => { mevCheck(c, sig, p.mint, e.side).catch(() => {}); }, 3000);   /* 3.29.18: the back-run lands within the validator's 1.6 s */
+    if (added) setTimeout(() => mevQueue(c, sig, p.mint, e.side), 3000);   /* 3.29.18: the back-run lands within the validator's 1.6 s */
   }
   if (ch) liveLedger();
   return ch;
@@ -1084,7 +1084,7 @@ async function handle(m) {
               if (r2.sending) { const sp = r2.sending, sg = r2.sig; delete r2.sending; sp.then(() => {}, e => { SIGS.set(sg, { err: { send: String((e && e.message) || e).slice(0, 140) } }); RB.delete(sg); }); }
               if (r2.tx64) { RB.set(r2.sig, { tx64: r2.tx64, t: Date.now(), last: Date.now(), sender: r2.tip >= 0.000005 ? Math.round(r2.tip * 1e9) : 0, o: o2, mint: r2.mint, retried: true, w: u.pub }); delete r2.tx64; }
               sigWatch(c, r2.sig).catch(() => {}); await pend(r2.sig, r2.mint, r2.side, Math.round(r2.tip * 1e9), u.pub); if (r2.sig1) await pend(r2.sig1, r2.mint, r2.side, Math.round((r2.tip1 || 0) * 1e9), u.pub, r2.sig);
-              RB.delete(a.sig); await book(c, b.pub, a.sig).catch(() => {});
+              RB.delete(a.sig); book(c, b.pub, a.sig).catch(() => {});   /* 3.29.19: not waited for */
               return { st: 'retry', sig: r2.sig, why: kind === 'slip' ? 'price moved past your ' + x.o.slip + '% slippage' : kind === 'budget' ? 'it needed more compute' : 'the coin migrated on the way', slip, ms: r2.ms };
             } catch (e) { r.why += '; second try not sent: ' + String(e.message || e).slice(0, 120); }
           }
@@ -1094,7 +1094,10 @@ async function handle(m) {
     }
     RB.delete(a.sig);
     if (r.st !== 'failed') for (const p of LIVE.ports) p.fresh();   /* landed: the panel shows the new balance now, not at the next tick */
-    if (!(await book(c, b.pub, a.sig).catch(() => false))) bookSoon(c, b.pub, a.sig);
+    /* 3.29.19 (owner 1124: "sold on the chart, no sound, the panel still says selling"): the panel used to hear "landed" only after the
+       ledger had booked the trade, and booking waited behind the sandwich checks' history reads in the node gate. Now "landed" goes back at
+       once and the ledger books it right after. */
+    book(c, b.pub, a.sig).then(ok => { if (!ok) bookSoon(c, b.pub, a.sig); }, () => bookSoon(c, b.pub, a.sig));
     return r;
   }
   if (m.op === 'fill') {   /* what a landed trade really got: SOL and tokens from the chain (the PnL ledger) */
@@ -1174,6 +1177,11 @@ async function sigWatch(c, sig) {
 setInterval(() => { if (LIVE.ports.size) { SOLX.warmSender(); SOLX.feeRefresh(null).catch(() => {}); cfg().then(c => SOLX.mevLeaders(rpcUrl(c))).catch(() => {}); } }, 15000);
 /* 3.29.18 sandwich validators: the list kept in storage ('mevBad'), the seed is in core.js */
 chrome.storage.local.get({ mevBad: {} }).then(o => { for (const l of Object.keys(o.mevBad || {})) SOLX.mevBad(l); }).catch(() => {});
+/* 3.29.19: the checks run one at a time (each reads ~14 transactions from the history), the newest 12 kept: a run of fast sells can not
+   fill the node gate's history lane that the ledger booking also uses */
+const MEVQ = []; let mevRun = false;
+function mevQueue(c, sig, mint, side) { MEVQ.push([c, sig, mint, side]); if (MEVQ.length > 12) MEVQ.shift(); if (!mevRun) mevNext(); }
+async function mevNext() { mevRun = true; try { while (MEVQ.length) { const [c, sig, mint, side] = MEVQ.shift(); await mevCheck(c, sig, mint, side).catch(() => {}); await new Promise(z => setTimeout(z, 400)); } } finally { mevRun = false; } }
 async function mevCheck(c, sig, mint, side) {
   if (c.mevGuard === false || !mint || /^0x/i.test(mint)) return;
   const own = new Set((await walletsAll()).map(w => w.pub));
