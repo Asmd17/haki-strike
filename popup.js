@@ -49,7 +49,7 @@ function hkNames() {   /* 3.20.6: the options read like the keys you press: Q, S
   const k = (String($('hkBuy').value || '').trim().split(/[\s,]+/)[0] || 'Q').toUpperCase().slice(0, 1) || 'Q';
   for (const o of $('hkMod').options) o.textContent = { none: k, space: 'Space + ' + k, ctrl: 'Ctrl + ' + k, alt: 'Alt + ' + k, shift: 'Shift + ' + k, off: 'Off' }[o.value];
 }
-const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, mevGuard: true, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, presets: null, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '', cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast' };
+const DEF = { autoSpeed: false, oneTx: true, autoSlip: true, mevGuard: true, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, presets: null, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '', cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'off' };
 const $ = id => document.getElementById(id);
 const say = (el, t, k) => { $(el).textContent = t || ''; $(el).className = 'st' + (k ? ' ' + k : ''); };
 const nums = (s, n, lo, hi) => String(s).split(/[\s,;]+/).map(x => parseFloat(x.replace(',', '.'))).filter(x => x > lo && x <= hi).slice(0, n);

@@ -35,8 +35,8 @@ chrome.runtime.onInstalled.addListener(async d => {
   } catch (_) {}
 });
 const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
-const DEF = { autoSpeed: true, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
-  cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'fast', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
+const DEF = { autoSpeed: false, feeMig: 0, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
+  cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'off', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
    (its cookies; this worker has host access to frontend-api-v3.pump.fun). Eligibility first: pump.fun needs a few seconds to see a new buy. */
@@ -234,6 +234,12 @@ async function cfg() {
   if (!c.tipMig) { let ch = false; if (+c.tip === 0.0003) { c.tip = 0.001; ch = true; }
     const p0 = Array.isArray(c.presets) && c.presets[0]; if (p0) { if (+p0.tip === 0.0003) { p0.tip = 0.001; ch = true; } if (+p0.stip === 0.0003) { p0.stip = 0.001; ch = true; } }
     c.tipMig = 1; chrome.storage.local.set(Object.assign({ tipMig: 1 }, ch ? { tip: c.tip } : {}, ch && p0 ? { presets: c.presets } : {})).catch(() => {}); }
+  /* 3.29.22 (owner 1124: "ping 837, buys often do not land, raise the bribe: we were about speed and the first block"): his buys went out
+     with tip 0.001 + priority ~0.0001 SOL (1 lamport per compute unit) while his P3 says 0.001 + 0.001: smart fees cut the priority to
+     the floor (the node's per-slot MINIMUM fees on the coin are what it measured) and the self-tuning tip eased the rest down while trades
+     landed. Both are off now and a trade pays its preset (priority ~10x higher on a buy); Settings -> Speed and fees turns them back on */
+  if (!c.feeMig) { c.autoFee = 'off'; c.autoSpeed = false; c.feeMig = 1; SPD.f = [1, 1, 1]; SPD.g = [0, 0, 0]; spdSave();
+    chrome.storage.local.set({ autoFee: 'off', autoSpeed: false, feeMig: 1 }).catch(() => {}); }
   const P = Array.isArray(c.presets) && c.presets.length === 3 ? c.presets : [Object.assign({}, PRESETS[0], { slip: +c.slip || 20, tip: c.tip != null ? +c.tip : 0.001 }), PRESETS[1], PRESETS[2]];
   /* each preset: buy slip / prio / tip and its own sell sslip / sprio / stip (a preset saved before 3.3.7 sells with its buy values) */
   const S = v => Math.min(100, Math.max(0.1, +v)), F = (v, d) => Math.min(0.01, Math.max(0, +v >= 0 && v !== '' && v != null ? +v : d)), T = (v, d) => Math.min(SOLX.TIP_MAX, Math.max(0, +v >= 0 && v !== '' && v != null ? +v : d));
@@ -243,7 +249,7 @@ async function cfg() {
   const a = c.presets[c.preset]; c.slip = a.slip; c.prio = a.prio; c.tip = a.tip; c.sslip = a.sslip; c.sprio = a.sprio; c.stip = a.stip;
   return c;
 }
-const feeOf = (c, side) => Object.assign(side === 'sell' ? { slip: c.sslip, prio: c.sprio, tip: c.stip } : { slip: c.slip, prio: c.prio, tip: c.tip }, { auto: ['fast', 'eco', 'off'].includes(c.autoFee) ? c.autoFee : 'fast' });   /* smart fees: the preset is the cap */   /* the preset's buy or sell settings */
+const feeOf = (c, side) => Object.assign(side === 'sell' ? { slip: c.sslip, prio: c.sprio, tip: c.stip } : { slip: c.slip, prio: c.prio, tip: c.tip }, { auto: ['fast', 'eco', 'off'].includes(c.autoFee) ? c.autoFee : 'off' });   /* smart fees: the preset is the cap */   /* the preset's buy or sell settings */
 /* 3.12.21 (owner 1120: "I sell at 12K, it fills at 10K"): Exact sell. A sell you click fills within 2 % of what the coin gives at the
    click (the quote at the click already has the pump.fun fee and your own size in it) or not at all: no fill far below the price you saw,
    and no automatic second try with more slippage. Auto sell (take profit / stop) keeps the preset's slippage: a stop must fill. */
