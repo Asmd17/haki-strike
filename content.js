@@ -813,7 +813,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     const k = x.pnl >= 0 ? 'up' : 'dn';
     setT('.pn', (x.pnl >= 0 ? '+' : '') + showVal(x.pnl)); setC('.pn', 'pn ' + k);
     setT('.pp', x.pct != null ? (x.pct >= 0 ? '+' : '') + x.pct.toFixed(1) + '%' : ''); setC('.pp', 'pp num ' + k);
-    $('.hero').title = 'Fees paid ' + x.gas.toFixed(5) + ' SOL (network, priority, tip; not in PnL, as on Axiom) · Holding = tokens x the current price · Bought = the most SOL you had in this coin at once (re-buys paid by earlier sells not added twice) · ' + x.nb + ' buy' + (x.nb === 1 ? '' : 's') + (x.buyAll != null ? ' ' + s4(x.buyAll) : '') + ' / ' + x.ns + ' sell' + (x.ns === 1 ? '' : 's') + (x.sellAll != null ? ' ' + s4(x.sellAll) : '') + ' SOL in all' + (p.usd ? ' · PnL ' + (x.pnl >= 0 ? '+$' : '-$') + Math.abs(x.pnl * p.usd).toFixed(2) : '');
+    $('.hero').title = 'Fees paid ' + x.gas.toFixed(5) + ' SOL (network, priority, tip): inside Bought / Sold and PnL, as on Axiom; % = PnL / all you bought' + (x.fly ? ' · ' + x.fly + ' trade' + (x.fly === 1 ? '' : 's') + ' just landed: counted at the current price until the chain\u2019s numbers come in' : '') + ' · Holding = tokens x the current price · Bought = the most SOL you had in this coin at once (re-buys paid by earlier sells not added twice) · ' + x.nb + ' buy' + (x.nb === 1 ? '' : 's') + (x.buyAll != null ? ' ' + s4(x.buyAll) : '') + ' / ' + x.ns + ' sell' + (x.ns === 1 ? '' : 's') + (x.sellAll != null ? ' ' + s4(x.sellAll) : '') + ' SOL in all' + (p.usd ? ' · PnL ' + (x.pnl >= 0 ? '+$' : '-$') + Math.abs(x.pnl * p.usd).toFixed(2) : '');
     paintSet();
   }
   const SIGW = new Map();

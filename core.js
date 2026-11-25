@@ -132,7 +132,7 @@ const SOLX = (() => {
   }
   const rgTop = () => { const c = {}; for (const [, m] of RM) c[m] = (c[m] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, k]) => m.replace(/^get/, '') + ' ' + k).join(', '); };
   async function rpc(method, params, url, low) {
-    low = !!low || LOWM.has(method);
+    low = low === false ? false : !!low || LOWM.has(method);   /* 3.29.26: false = the booking read of a trade you just made (not the history lane) */
     for (let i = 0; ; i++) {
       if (url) await gate(method, low);
       const r = await fetch(url || RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
@@ -790,7 +790,7 @@ const SOLX = (() => {
   /* what one confirmed trade did to the wallet, from the chain itself: SOL change of the wallet, the network fee, a new token account's
      rent (not a cost: it comes back when the account is closed), the token change. tip = the Jito tip we asked Jupiter to add. */
   async function txDeltas(sig, pub, mint, tipLamports, url) {
-    const r = await rpc('getTransaction', [sig, { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 1 }], url);   /* Axiom sends v1 */
+    const r = await rpc('getTransaction', [sig, { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 1 }], url, tipLamports != null ? false : undefined);   /* Axiom sends v1; 3.29.26: your own trade's booking does not queue behind the sandwich checks' history reads */
     if (!r) return null;   /* not visible yet */
     const m = r.meta || {}, keys = ((r.transaction || {}).message || {}).accountKeys || [];
     const wi = keys.findIndex(k => (k.pubkey || k) === pub); if (wi < 0) throw new Error('our wallet is not in that transaction');
@@ -826,17 +826,22 @@ const SOLX = (() => {
     /* 3.12.25 (owner 1120, FMWY: 'I did not buy for 2.7 SOL'): re-buys paid with what an earlier sell brought back were added to Bought
        (9 buys = 2.7 SOL while at most 1.45 SOL of his was ever in the coin). Bought = the most SOL in the coin at once (your real stake),
        Sold = what came back on top of the re-buys; PnL unchanged. The plain sums stay in buyAll / sellAll. */
-    let bought = 0, sold = 0, gas = 0, base = 0, prio = 0, tip = 0, plat = 0, rent = 0, nb = 0, ns = 0, split = true, net0 = 0, peak = 0;
+    /* 3.29.26 (owner 1125, Flor: HAKI +0.419 / Axiom +0.496 on the same trades; the chain: Axiom's Bought 1.308 = 1.300 + 4 x 0.002,
+       Sold 1.532 = the 7 sells less 7 x 0.002): Axiom counts the network fee, the priority fee and the tip inside Bought / Sold (what left /
+       reached the wallet; the token account's rent apart) and its % is PnL / all bought. HAKI does the same now, so PnL and % read as on
+       Axiom; gas stays as the breakdown. fly = trades that landed and are not booked yet (bg.js pnlFly: counted at the current price). */
+    let bought = 0, sold = 0, gas = 0, base = 0, prio = 0, tip = 0, plat = 0, rent = 0, nb = 0, ns = 0, split = true, net0 = 0, peak = 0, fly = 0;
     for (const e of (L || []).slice().sort((x, y) => (x.t || 0) - (y.t || 0))) {
-      if (e.side === 'buy') { bought += e.sol; nb++; net0 += e.sol; if (net0 > peak) peak = net0; } else { sold += e.sol; ns++; net0 -= e.sol; }
-      gas += e.gas; plat += e.plat || 0; rent += (e.rent || 0) - (e.back || 0);
+      const g = +e.gas || 0;
+      if (e.side === 'buy') { const s = e.sol + g; bought += s; nb++; net0 += s; if (net0 > peak) peak = net0; } else { const s = e.sol - g; sold += s; ns++; net0 -= s; }
+      gas += g; if (e.fly) fly++; plat += e.plat || 0; rent += (e.rent || 0) - (e.back || 0);
       if (e.fee != null) { base += e.base || 0; prio += Math.max(0, e.fee - (e.base || 0)); tip += e.tip || 0; } else split = false;
     }
-    const hold = +holdingSol || 0, pnl = sold + hold - bought, net = pnl - gas, buyAll = bought, sellAll = sold;
+    const hold = +holdingSol || 0, pnl = sold + hold - bought, net = pnl, buyAll = bought, sellAll = sold, pct = buyAll > 0 ? pnl / buyAll * 100 : null;
     if (peak > 0 && peak < bought) { sold -= bought - peak; bought = peak; }
     if (sold < 1e-9) sold = 0;   /* 3.29.14 (owner 1123, "Sold -0.0000"): sells re-bought in full leave net back 0, the float rest showed as -0.0000 */
-    return { bought, sold, buyAll, sellAll, gas, hold, pnl, pct: bought > 0 ? pnl / bought * 100 : null, net, netPct: bought > 0 ? net / bought * 100 : null,
-      base, prio, tip, plat, rent: Math.max(0, rent), split, nb, ns };
+    return { bought, sold, buyAll, sellAll, gas, hold, pnl, pct, net, netPct: pct,
+      base, prio, tip, plat, rent: Math.max(0, rent), split, nb, ns, fly };
   }
 
   /* ---- pump.fun bonding curve built right here (no Jupiter, no rate limit): buy_exact_quote_in_v3 / sell_v3 for SOL-quoted curves,
@@ -890,10 +895,14 @@ const SOLX = (() => {
     if (FEE.acct.size > 200) FEE.acct.clear();
     await Promise.all(jobs);
   }
+  /* 3.29.26 (owner 1125: "a preset of 0.005 priority sells even slower"): routes through Jupiter passed no account to measure, so every such
+     trade paid the floor (1,000,000 micro-lamports per unit = 0.0001-0.0004 SOL) whatever the preset said; a coin not measured yet did the
+     same. Now the priority fee is eased down only on a fresh measurement of the coin's own pool (Jupiter: the route's first pool); without
+     one the preset is paid, as the comment above always promised. */
   function smart(o, hot, cu, tipL, prio, url) {   /* tipL in lamports, prio in SOL (the preset's, already capped) -> the same units */
     if (!o.auto || o.auto === 'off') return { tip: tipL, prio };
-    const a = hot && FEE.acct.get(hot), mu = Math.max(PRIO_FLOOR, 2 * ((a && a.p) || 0));
-    const p2 = Math.min(prio, mu * cu / 1e15);
+    const a = hot && FEE.acct.get(hot), known = !!(a && a.p > 0 && Date.now() - a.t < 60000), mu = known ? Math.max(PRIO_FLOOR, 2 * a.p) : 0;
+    const p2 = known ? Math.min(prio, mu * cu / 1e15) : prio;
     let t2 = tipL; if (tipL >= TIP_MIN * 1e9 && FEE.tip > 0 && Date.now() - FEE.tipAt < 120000) t2 = Math.min(tipL, Math.round(Math.max(TIP_MIN, o.auto === 'eco' ? FEE.tip95 : FEE.tip) * 1e9));
     if (tipL >= 1000000) t2 = Math.max(t2, 1000000);   /* 3.20.5: from 0.001 SOL Helius Sender sends to Jito AND the SWQOS lanes at once: keep it there */
     feeRefresh(hot, url).catch(() => {});   /* for the next click */
@@ -1197,7 +1206,7 @@ const SOLX = (() => {
     const [js, bh] = await Promise.all([Promise.all([jupLeg(q, pub, soft), ...(q2 ? [jupLeg(q2, pub, soft, false, true)] : [])]), blockhash(url)]);
     const conv = x => ({ prog: x.programId, keys: x.accounts.map(a => [a.pubkey, !!a.isSigner, !!a.isWritable]), data: unb64(x.data) });
     const cu = Math.min(1400000, (+js[0].computeUnitLimit || 300000) + (q2 ? 300000 : 0) + 2000 + uq());
-    ({ tip, prio } = smart(o, null, cu, tip, prio, url));
+    ({ tip, prio } = smart(o, (((q.routePlan || [])[0] || {}).swapInfo || {}).ammKey || null, cu, tip, prio, url));
     const ixs = [{ prog: CBP, keys: [], data: cat(Uint8Array.of(2), le(cu, 4)) }, { prog: CBP, keys: [], data: cat(Uint8Array.of(3), le(Math.floor(prio * 1e15 / cu), 8)) },
       ...js.flatMap((j, i) => [...(j.setupInstructions || []).map(conv),
         ...(i === 0 && q2 ? [conv(js[1].tokenLedgerInstruction)] : []),   /* 3.29.14: the quote coin balance noted right before the first leg (its account exists by now) */

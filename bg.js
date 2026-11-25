@@ -355,6 +355,31 @@ async function posAll(c, a, isMint, pubs) {
 }
 const rpcUrl = c => (c.rpc && /^https:\/\//.test(c.rpc)) ? c.rpc : undefined;
 const busy = new Set(), done = new Map();
+/* 3.29.26 (owner 1125, "отстает": Flor showed Sold 1.447 while the chain and Axiom had the 7th sell, Copyinu Sold 0.519 = PnL 0.2 SOL low):
+   a sell's tokens left Holding the moment it landed, but its SOL entered Sold only once the ledger could read the transaction (seconds,
+   behind the sandwich checks' history reads; bookSoon gave up after ~25 tries). A trade of this extension that landed counts at once now:
+   a sell = the tokens it sold x the coin's current price, a buy = its amount, with its tip + priority fee; the chain's own numbers replace
+   it when it is booked. */
+const FLY = new Map(), PXR = new Map();
+function flyAdd(r, pub, sol) {
+  if (!r || !r.sig || !r.mint) return; const n = r.sig1 ? 2 : 1, pr = +r.prio > 0 && +r.prio < 0.1 ? +r.prio : 0;
+  FLY.set(r.sig, { mint: r.mint, side: r.side, w: pub, sol: r.side === 'buy' ? +sol || 0 : 0, amt: r.side === 'sell' ? Number(r.amt || 0) : 0,
+    gas: (+r.tip || 0) + (+r.tip1 || 0) + n * (pr + 0.000005), t: Date.now(), at: 0 });
+  for (const [s, f] of FLY) if (FLY.size > 60 || Date.now() - f.t > 200000) FLY.delete(s); else break;
+}
+function flyLand(sig, err) { const f = FLY.get(sig); if (!f) return; if (err) FLY.delete(sig); else if (!f.at) f.at = Date.now(); }
+function pnlFly(L, mint, pubs, raw, v) {
+  L = L || []; const r = Number(raw || 0), now = Date.now(); if (mint && r > 0 && v > 0) PXR.set(mint, v / r);
+  const px = PXR.get(mint), add = [];
+  for (const [sig, f] of FLY) {
+    if (now - f.t > 200000) { FLY.delete(sig); continue; }
+    if (f.mint !== mint || !f.at || !(pubs || []).includes(f.w)) continue;
+    if (L.some(e => e.sig === sig)) { FLY.delete(sig); continue; }   /* booked: the chain's numbers are in the ledger */
+    const sol = f.side === 'buy' ? f.sol : px ? f.amt * px : 0; if (!(sol > 0)) continue;
+    add.push({ t: f.at, side: f.side, sol, gas: f.gas, fly: true, sig });
+  }
+  const A = add.length ? L.concat(add) : L; return A.length ? SOLX.pnlOf(A, v) : null;
+}
 
 /* PnL ledger (chrome.storage.local 'led' = {mint: [{t, side, sol, gas, rent, tok, sig}]}): every trade this extension sent is kept as
    pending (storage.session 'pend') and booked once the chain shows it, with the amounts read from the transaction itself. */
@@ -371,9 +396,9 @@ async function book(c, pub0, only) {
     if (only && sig !== only && p.pair !== only) continue;   /* 3.29.6: step 1 of a two-step trade with its step 2 */
     const pub = p.w || pub0;
     let x = null; try { x = await SOLX.txDeltas(sig, pub, p.mint, p.tip, rpcUrl(c)); } catch (_) { x = null; }
-    if (!x) { if (Date.now() - p.t > 180000) { await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); ch = true; } continue; }   /* not visible after 3 min: dropped (failed / expired) */
+    if (!x) { if (Date.now() - p.t > 180000) { FLY.delete(sig); await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); ch = true; } continue; }   /* not visible after 3 min: dropped (failed / expired) */
     ch = true;
-    if (x.failed) { await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); continue; }
+    if (x.failed) { FLY.delete(sig); await MUT(async () => { const { pend: q = {} } = await chrome.storage.session.get({ pend: {} }); delete q[sig]; await chrome.storage.session.set({ pend: q }); }); continue; }
     const e = { t: x.t || Date.now(), side: p.side, gas: (x.fee + x.tip) / 1e9, fee: x.fee / 1e9, base: x.base / 1e9, tip: x.tip / 1e9, plat: x.plat / 1e9, back: x.back / 1e9, v: 2, rent: x.rent / 1e9, tok: x.tok, dec: x.dec, sig, w: pub };
     e.sol = p.side === 'buy' ? Math.max(0, -x.d - x.fee - x.tip - x.rent) / 1e9 : Math.max(0, x.d + x.fee + x.tip) / 1e9;
     const added = await MUT(async () => {   /* booked and taken off the pending list in one step */
@@ -690,7 +715,9 @@ async function bscAutoSell(tok, [kind, pct, label], x) {
 setInterval(bscAutoTick, 3000);
 try { chrome.alarms.create('auto', { periodInMinutes: 0.5 }); chrome.alarms.onAlarm.addListener(a => { if (a.name === 'auto') autoTick(); }); } catch (_) {}
 /* after a confirmation the chain may need a moment to show the transaction: try again in the background, the panel updates by itself */
-function bookSoon(c, pub, sig) {   /* pub: only the fallback; a pending trade knows its wallet */ let n = 0; const go = async () => { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); if (!pend[sig] || n++ > 25) return; await book(c, pub, sig).catch(() => {}); setTimeout(go, 400); }; setTimeout(go, 250); }
+/* 3.29.26: it kept trying for ~10 s only; a trade not readable by then waited for the panel to be opened again. Now until it is booked or
+   dropped (3 min, book): every 0.4 s, then every 1 s, then every 3 s */
+function bookSoon(c, pub, sig) {   /* pub: only the fallback; a pending trade knows its wallet */ let n = 0; const go = async () => { const { pend = {} } = await chrome.storage.session.get({ pend: {} }); if (!pend[sig] || n++ > 120) return; await book(c, pub, sig).catch(() => {}); setTimeout(go, n < 15 ? 400 : n < 45 ? 1000 : 3000); }; setTimeout(go, 250); }
 const RB = new Map();   /* sig -> signed transaction, sent again every 1.5 s until the chain shows it (25 s max) */
 
 /* 3.12.3 the new wallets of Multi (hidden: not in the wallet list). Their keys are encrypted with a key of their own (a non-extractable
@@ -1063,7 +1090,7 @@ async function handle(m) {
     await book(c, b.pub).catch(() => {});
     const [p, usd] = await Promise.all([posAll(c, a.a, !!a.isMint, pubs), SOLX.solUsd()]);
     const L = await ledOf(p.mint, pubs);
-    return Object.assign(p, { usd, pnl: L.length ? SOLX.pnlOf(L, p.value_sol) : null });
+    return Object.assign(p, { usd, pnl: pnlFly(L, p.mint, pubs, p.raw, p.value_sol) });
   }
   if (m.op === 'mevHeld') return SOLX.mevHeld(a.sig) || {};
   if (m.op === 'tx') {
@@ -1089,7 +1116,7 @@ async function handle(m) {
               const o2 = Object.assign({}, x.o, { slip }), r2 = await SOLX.trade(o2, u.seed, u.pub, rpcUrl(c));
               if (r2.sending) { const sp = r2.sending, sg = r2.sig; delete r2.sending; sp.then(() => {}, e => { SIGS.set(sg, { err: { send: String((e && e.message) || e).slice(0, 140) } }); RB.delete(sg); }); }
               if (r2.tx64) { RB.set(r2.sig, { tx64: r2.tx64, t: Date.now(), last: Date.now(), sender: r2.tip >= 0.000005 ? Math.round(r2.tip * 1e9) : 0, o: o2, mint: r2.mint, retried: true, w: u.pub }); delete r2.tx64; }
-              sigWatch(c, r2.sig).catch(() => {}); await pend(r2.sig, r2.mint, r2.side, Math.round(r2.tip * 1e9), u.pub); if (r2.sig1) await pend(r2.sig1, r2.mint, r2.side, Math.round((r2.tip1 || 0) * 1e9), u.pub, r2.sig);
+              flyAdd(r2, u.pub, o2.sol); sigWatch(c, r2.sig).catch(() => {}); await pend(r2.sig, r2.mint, r2.side, Math.round(r2.tip * 1e9), u.pub); if (r2.sig1) await pend(r2.sig1, r2.mint, r2.side, Math.round((r2.tip1 || 0) * 1e9), u.pub, r2.sig);
               RB.delete(a.sig); book(c, b.pub, a.sig).catch(() => {});   /* 3.29.19: not waited for */
               return { st: 'retry', sig: r2.sig, why: kind === 'slip' ? 'price moved past your ' + x.o.slip + '% slippage' : kind === 'budget' ? 'it needed more compute' : 'the coin migrated on the way', slip, ms: r2.ms };
             } catch (e) { r.why += '; second try not sent: ' + String(e.message || e).slice(0, 120); }
@@ -1099,7 +1126,7 @@ async function handle(m) {
       }
     }
     RB.delete(a.sig);
-    if (r.st !== 'failed') for (const p of LIVE.ports) p.fresh();   /* landed: the panel shows the new balance now, not at the next tick */
+    flyLand(a.sig, r.st === 'failed'); if (r.st !== 'failed') for (const p of LIVE.ports) p.fresh();   /* landed: the panel shows the new balance now, not at the next tick */
     /* 3.29.19 (owner 1124: "sold on the chart, no sound, the panel still says selling"): the panel used to hear "landed" only after the
        ledger had booked the trade, and booking waited behind the sandwich checks' history reads in the node gate. Now "landed" goes back at
        once and the ledger books it right after. */
@@ -1136,7 +1163,7 @@ async function handle(m) {
           if (r.tx64) { if (r.sent) RB.set(r.sig, { tx64: r.tx64, t: Date.now(), last: Date.now(), sender: r.tip >= 0.000005 ? Math.round(r.tip * 1e9) : 0, mint: r.mint, w: u.pub,
             o: Object.assign({ side: a.side, a: a.a, sol: a.sol, pct: a.pct, isMint: !!a.isMint, maxSol: c.maxSol }, fz) }); delete r.tx64; }
           if (r.side === 'buy' && hb) hb.v -= Math.round((+a.sol + r.tip) * 1e9);   /* until the next read */
-          if (r.sent) { sigWatch(c, r.sig).catch(() => {}); pend(r.sig, r.mint, r.side, Math.round(r.tip * 1e9), u.pub).catch(() => {}); landNote(r.sig, Object.assign({ cap: fz.cap }, r), c); }   /* the ledger note is not on the click's path */
+          if (r.sent) { flyAdd(r, u.pub, a.sol); sigWatch(c, r.sig).catch(() => {}); pend(r.sig, r.mint, r.side, Math.round(r.tip * 1e9), u.pub).catch(() => {}); landNote(r.sig, Object.assign({ cap: fz.cap }, r), c); }   /* the ledger note is not on the click's path */
           if (r.sent && r.sig1) await pend(r.sig1, r.mint, r.side, Math.round((r.tip1 || 0) * 1e9), u.pub, r.sig);   /* 3.8.6 two steps: both count for PnL (SOL in one, tokens in the other) */
           return Object.assign(r, { w: w.pub, label: w.label });
         } catch (e) { return { w: w.pub, label: w.label, err: String((e && e.message) || e).slice(0, 160) }; }
@@ -1227,7 +1254,7 @@ function wsOpen(c) {
     if (j.id != null && LIVE.wait.has(j.id)) { LIVE.wait.get(j.id)(j); LIVE.wait.delete(j.id); return; }
     if (j.method === 'accountNotification') { const f = LIVE.subs.get(j.params.subscription); if (f) f(j.params.result.value, ((j.params.result || {}).context || {}).slot || 0); }   /* 3.29.4: + the slot it is from */
     if (j.method === 'slotNotification') { SLOT.v = (j.params.result || {}).slot || SLOT.v; SLOT.t = Date.now(); SOLX.mevSlot(SLOT.v); return; }
-    if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { landSeen(s, ((j.params.result || {}).context || {}).slot, ((j.params.result || {}).value || {}).err); LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
+    if (j.method === 'signatureNotification') { const s = LIVE.sigs.get(j.params.subscription); if (s) { landSeen(s, ((j.params.result || {}).context || {}).slot, ((j.params.result || {}).value || {}).err); flyLand(s, ((j.params.result || {}).value || {}).err); LIVE.sigs.delete(j.params.subscription); SIGS.set(s, { err: ((j.params.result || {}).value || {}).err || null });
       for (const p of LIVE.ports) try { p.postMessage({ sigDone: s }); } catch (_) {} } }   /* 3.20.5: the panel hears it at once (was: its next 120 ms ask) */
   };
   ws.onclose = () => { if (LIVE.ws !== ws) return; LIVE.ws = null; setTimeout(() => { for (const p of LIVE.ports) p.resub(); }, 800); };
@@ -1256,7 +1283,7 @@ chrome.runtime.onConnect.addListener(port => {
       const st = S.st, raw = total(), v = SOLX.valueNow(Object.assign({}, st, { raw })); if (v == null) return;
       if (S.a && S.mint) AMAP.set(S.a, S.mint);
       const ac = false ? { b: autoSlip(S.mint, 'buy', feeT(S.c, 'buy').slip), s: autoSlip(S.mint, 'sell', feeT(S.c, 'sell').slip) } : null;
-      post({ sym: S.sym, mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length, aslip: ac });
+      post({ sym: S.sym, mint: S.mint, raw: raw.toString(), dec: st.dec, ui: Number(raw) / 10 ** st.dec, value_sol: v, usd: S.usd, pnl: pnlFly(S.L, S.mint, S.pubs, raw, v), live: true, n: S.pubs.length, aslip: ac });
     }, d);
   };
   const stop = () => { for (const id of S.ids) wsUnsub(S.c, id); S.ids = []; clearInterval(S.poll); clearInterval(S.rate); clearInterval(S.chk); clearInterval(S.ar); S.poll = S.rate = S.chk = S.ar = 0; S.rsl.clear(); if (S.st) S.st.live = false; S.st = null; };
@@ -1279,7 +1306,7 @@ chrome.runtime.onConnect.addListener(port => {
     const p = await posAll(c, S.a, S.isMint, pubs); if (gen !== S.gen) return;
     S.mint = p.mint; S.sym = null; symOf(p.mint, rpcUrl(c)).then(x => { if (S.mint === p.mint) S.sym = x; }).catch(() => {}); S.usd = await SOLX.solUsd(); S.L = await ledOf(p.mint, pubs); coinFull(p.mint).catch(() => {});   /* for Share PnL */
     if (gen !== S.gen) return;
-    post(Object.assign({}, p, { usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, p.value_sol) : null }));
+    post(Object.assign({}, p, { usd: S.usd, pnl: pnlFly(S.L, S.mint, pubs, p.raw, p.value_sol) }));
     S.raws = new Map(p.parts.map(q => [q.pub, BigInt(q.raw || 0)]));
     S.atas = p.parts.map(q => ({ pub: q.pub, ata: q.ata || (SOLX.ST.get(p.mint + '|' + q.pub) || {}).ata })).filter(q => q.ata);
     for (const q of S.atas) syncChain(c, q.pub, p.mint, q.ata).catch(() => {});   /* trades made outside the panel count too */
@@ -1328,7 +1355,7 @@ chrome.runtime.onConnect.addListener(port => {
         let L = null, rate = p.llq === SOLX.WSOL ? 1 : await SOLX.quoteRate(p.llq), lt = 0, ll = 0;
         const lpaint = () => { if (lt) return; lt = setTimeout(() => { lt = 0; ll = Date.now(); if (gen !== S.gen || !L || !(rate > 0)) return;
           const raw = total(), v = Number(raw) * (Number(L.Q) / Number(L.B) * rate) / 1e9;
-          post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length });
+          post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: pnlFly(S.L, S.mint, S.pubs, raw, v), live: true, n: S.pubs.length });
         }, Math.max(0, 120 - (Date.now() - ll))); };
         const take = d => { const x = SOLX.llOf(d); if (!x) return; if (x.status !== 0) { port.resub(); return; } if (x.B > 0n && x.Q > 0n) { L = x; lpaint(); } };
         const [pa] = await SOLX.accs([p.ll], rpcUrl(c)); take(pa && pa.data);
@@ -1362,7 +1389,7 @@ chrome.runtime.onConnect.addListener(port => {
       const gpaint = () => { if (gt) return; gt = setTimeout(() => { gt = 0; gl = Date.now(); if (gen !== S.gen || R[0] == null || R[1] == null || !(rate > 0)) return;
         const tokRaw = Number(R[tokSide] - fees[tokSide]), qRaw = Number(R[1 - tokSide] - fees[1 - tokSide]); if (!(tokRaw > 0 && qRaw > 0)) return;
         const raw = total(), v = Number(raw) * (qRaw * rate / tokRaw) / 1e9;
-        post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length });
+        post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: pnlFly(S.L, S.mint, S.pubs, raw, v), live: true, n: S.pubs.length });
       }, Math.max(0, 120 - (Date.now() - gl))); };
       S.ids.push(await wsSub(c, v0, v => { const x = amt(v); if (x != null) { R[0] = x; gpaint(); } }));
       S.ids.push(await wsSub(c, v1, v => { const x = amt(v); if (x != null) { R[1] = x; gpaint(); } }));
@@ -1378,7 +1405,7 @@ chrome.runtime.onConnect.addListener(port => {
       return;
     } catch (_) { /* not a Raydium CPMM coin with SOL: polling below */ }
     let lastRaw = p.raw;
-    S.poll = setInterval(async () => { const q = await posAll(c, S.a, S.isMint, pubs).catch(() => null); if (q && gen === S.gen) { if (q.raw !== lastRaw) { lastRaw = q.raw; for (const a of S.atas) syncSoon(a); } post(Object.assign(q, { usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, q.value_sol) : null })); } }, 1500);   /* 3.12.26: was 3 s (float / Raydium coins: PnL lagged) */
+    S.poll = setInterval(async () => { const q = await posAll(c, S.a, S.isMint, pubs).catch(() => null); if (q && gen === S.gen) { if (q.raw !== lastRaw) { lastRaw = q.raw; for (const a of S.atas) syncSoon(a); } post(Object.assign(q, { usd: S.usd, pnl: pnlFly(S.L, S.mint, S.pubs, q.raw, q.value_sol) })); } }, 1500);   /* 3.12.26: was 3 s (float / Raydium coins: PnL lagged) */
   }
   port.say = post;
   port.fresh = async () => { S.ft = Date.now();   /* re-read the token account (and the wallet) right after a trade lands; again 1 s later for a lagging node */
