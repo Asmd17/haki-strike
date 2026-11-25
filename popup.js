@@ -1,4 +1,4 @@
-const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
+const PRESETS = [{ slip: 20, prio: 0.0002, tip: 0.0002, sslip: 100 }, { slip: 25, prio: 0.001, tip: 0.001, sslip: 100 }, { slip: 30, prio: 0.005, tip: 0.005, sslip: 100 }];   /* 3.29.27: = bg.js */
 /* 3.20.7 (owner: "let people make their own: buy 1 2 3 4, sell Q W E R"): 8 boxes; click one, press the key. Letters and digits (the
    top row or the number pad); a key already used elsewhere swaps over; Esc cancels; Backspace clears */
 const hkKeyOf = e => { const c = e.code || ''; return /^Key[A-Z]$/.test(c) ? c.slice(3).toLowerCase() : /^(Digit|Numpad)[0-9]$/.test(c) ? c.slice(-1) : null; };
@@ -225,7 +225,7 @@ async function load0() {
   $('buys').value = c.buys.join(', '); $('sells').value = c.sells.join(', '); $('quick').value = c.quick;
   const P = Array.isArray(c.presets) && c.presets.length === 3 ? c.presets : [Object.assign({}, PRESETS[0], { slip: c.slip, tip: c.tip }), PRESETS[1], PRESETS[2]];
   P.forEach((p, i) => { $('s' + i).value = p.slip; $('f' + i).value = p.prio; $('t' + i).value = p.tip;
-    $('ss' + i).value = p.sslip ?? p.slip; $('sf' + i).value = p.sprio ?? p.prio; $('st' + i).value = p.stip ?? p.tip; });   /* 3.10.1: sell settings here too (owner: "slippage does not change") */
+    $('ss' + i).value = p.sslip ?? PRESETS[i].sslip ?? p.slip; $('sf' + i).value = p.sprio ?? p.prio; $('st' + i).value = p.stip ?? p.tip; });   /* 3.10.1: sell settings here too (owner: "slippage does not change") */
   $('hkMod').value = c.hk ? (['none', 'ctrl', 'alt', 'shift', 'space'].includes(c.hkMod) ? c.hkMod : 'none') : 'off';
   $('hkBuy').value = (c.hkBuy || DEF.hkBuy).join(' ').toUpperCase(); $('hkSell').value = (c.hkSell || DEF.hkSell).join(' ').toUpperCase();
   hkNames(); hkBoxes();

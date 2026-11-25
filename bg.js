@@ -34,8 +34,11 @@ chrome.runtime.onInstalled.addListener(async d => {
     }
   } catch (_) {}
 });
-const PRESETS = [{ slip: 20, prio: 0.0001, tip: 0.001 }, { slip: 25, prio: 0.0005, tip: 0.0005 }, { slip: 30, prio: 0.001, tip: 0.001 }];
-const DEF = { autoSpeed: false, feeMig: 0, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
+/* 3.29.27 (owner 1125: "three presets: 1 the cheapest, 2 faster, 3 the speed of light; sells must always go through whatever the volatility"):
+   P1 ~0.0004 SOL a trade (priority 0.0002 + tip 0.0002: Helius Sender's SWQOS lane), P2 ~0.002 (0.001 + 0.001: Jito and SWQOS at once),
+   P3 ~0.01 (0.005 + 0.005: top of the block and of Jito's auction). Sells 100 % slippage on all three: a sell never fails on price. */
+const PRESETS = [{ slip: 20, prio: 0.0002, tip: 0.0002, sslip: 100 }, { slip: 25, prio: 0.001, tip: 0.001, sslip: 100 }, { slip: 30, prio: 0.005, tip: 0.005, sslip: 100 }];
+const DEF = { autoSpeed: false, feeMig: 0, presetMig: 0, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
   cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'off', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
@@ -244,7 +247,15 @@ async function cfg() {
   /* each preset: buy slip / prio / tip and its own sell sslip / sprio / stip (a preset saved before 3.3.7 sells with its buy values) */
   const S = v => Math.min(100, Math.max(0.1, +v)), F = (v, d) => Math.min(0.01, Math.max(0, +v >= 0 && v !== '' && v != null ? +v : d)), T = (v, d) => Math.min(SOLX.TIP_MAX, Math.max(0, +v >= 0 && v !== '' && v != null ? +v : d));
   c.presets = P.map((p, i) => { const b = { slip: S(+p.slip || PRESETS[i].slip), prio: F(p.prio, PRESETS[i].prio), tip: T(p.tip, PRESETS[i].tip) };
-    return Object.assign(b, { sslip: +p.sslip ? S(p.sslip) : b.slip, sprio: F(p.sprio, b.prio), stip: T(p.stip, b.tip) }); });
+    return Object.assign(b, { sslip: +p.sslip ? S(p.sslip) : PRESETS[i].sslip || b.slip, sprio: F(p.sprio, b.prio), stip: T(p.stip, b.tip) }); });
+  /* 3.29.27 once: the three tiers above are written into your presets (priority fee and tip, buy and sell; sell slippage 100 %; your buy
+     slippage stays), and Smart fees / Self-tuning tip go off again: they paid the floor instead of the preset (23:36-23:38 1125: 0.0001-0.0004
+     SOL of priority under a 0.005 preset). Settings -> Presets changes any of it. */
+  if (!c.presetMig) {
+    c.presets = c.presets.map((p, i) => Object.assign({}, p, { prio: PRESETS[i].prio, tip: PRESETS[i].tip, sprio: PRESETS[i].prio, stip: PRESETS[i].tip, sslip: 100 }));
+    c.presetMig = 1; c.autoFee = 'off'; c.autoSpeed = false; SPD.f = [1, 1, 1]; SPD.g = [0, 0, 0]; spdSave();
+    chrome.storage.local.set({ presets: c.presets, presetMig: 1, autoFee: 'off', autoSpeed: false }).catch(() => {});
+  }
   c.preset = [0, 1, 2].includes(+c.preset) ? +c.preset : 0;
   const a = c.presets[c.preset]; c.slip = a.slip; c.prio = a.prio; c.tip = a.tip; c.sslip = a.sslip; c.sprio = a.sprio; c.stip = a.stip;
   return c;

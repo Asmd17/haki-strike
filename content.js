@@ -589,7 +589,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
  <div class="tb">
   <img class="mk" src="${chrome.runtime.getURL('icons/mark-18.png')}" srcset="${[[18, 1], [23, 1.25], [27, 1.5], [36, 2], [54, 3]].map(([n, x]) => chrome.runtime.getURL('icons/mark-' + n + '.png') + ' ' + x + 'x').join(', ')}" width="18" height="18" alt="HAKI" draggable="false">
   <button class="ib kbt" title="Hotkeys: hold Space, then Q W E R to buy, A S D F to sell" aria-label="Hotkeys">${I.kb}</button>
-  <div class="tabs" role="tablist" aria-label="Presets"><button data-p="0">${I.p[0]}P1</button><button data-p="1">${I.p[1]}P2</button><button data-p="2">${I.p[2]}P3</button></div>
+  <div class="tabs" role="tablist" aria-label="Presets"><button data-p="0" title="P1: the cheapest">${I.p[0]}P1</button><button data-p="1" title="P2: faster">${I.p[1]}P2</button><button data-p="2" title="P3: the fastest">${I.p[2]}P3</button></div>
   <button class="ppb" type="button" aria-pressed="false" title="Paper trading: practice on live prices with play money. Nothing is signed or sent">Paper</button>
   <button class="ib edt" title="Edit the buy and sell amounts" aria-label="Edit amounts">${I.pen}</button>
   <span class="sp"></span>
