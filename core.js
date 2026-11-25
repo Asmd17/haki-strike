@@ -212,9 +212,10 @@ const SOLX = (() => {
      its slot 473348380, his 1 SOL buy 5th in 473348381, the T85 sell 7th in 473348382 = all three slots its own; 10.47M tokens for 1 SOL
      where ~21M was the price): a validator sees every transaction sent to it while it makes its 4 slots (1.6 s). A trade is not sent
      while one on the block list makes this slot or the next two: it waits them out (100 ms steps, at most 2.4 s in practice, never over 4 s), then goes to the next
-     validator. A resend is skipped in those slots. The list = ALp2Gd... + every validator caught sandwiching one of your trades
-     (sandwichOf, checked after each trade lands). Off: Settings, Speed and fees, Skip sandwich validators. */
-  const MEV = { on: true, bad: new Set(['ALp2GdA1eJV8vZHMHazCtTxNXe3BLUSco9LDASgjDs8R']), lead: null, slot: 0, slotT: 0, slot2: 0, slot2T: 0, busy: false }, MEVH = new Map();
+     validator. A resend is skipped in those slots. The list = ALp2Gd... + the validators caught sandwiching your trades (sandwichOf,
+     checked after each trade lands; 3.29.25: caught twice in 24 h, blocked for 6 h after the last catch, bg.js mevApply).
+     Off: Settings, Speed and fees, Skip sandwich validators. */
+  const MEV = { on: true, seed: 'ALp2GdA1eJV8vZHMHazCtTxNXe3BLUSco9LDASgjDs8R', bad: new Set(['ALp2GdA1eJV8vZHMHazCtTxNXe3BLUSco9LDASgjDs8R']), lead: null, slot: 0, slotT: 0, slot2: 0, slot2T: 0, busy: false }, MEVH = new Map();
   const mevSlot = s => { if (s > 0) { MEV.slot = s; MEV.slotT = Date.now(); } };
   const slotEst = () => { const n = Date.now(); if (MEV.slot && n - MEV.slotT < 5000) return MEV.slot + Math.floor((n - MEV.slotT) / 400); if (MEV.slot2 && n - MEV.slot2T < 15000) return MEV.slot2 + Math.floor((n - MEV.slot2T) / 400); return 0; };
   const leaderAt = s => { const L = MEV.lead; return L && s >= L.start && s < L.start + L.list.length ? L.list[s - L.start] : null; };
@@ -1734,7 +1735,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, mevSet: L => { MEV.bad = new Set([MEV.seed, ...(L || [])]); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64, llState, llOf, cpmmOf, cpmmState };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

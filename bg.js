@@ -1181,8 +1181,16 @@ async function sigWatch(c, sig) {
 }
 /* while a coin is open in the panel: keep the TLS connection to Helius Sender warm, so a click does not pay the handshake */
 setInterval(() => { if (LIVE.ports.size) { SOLX.warmSender(); SOLX.feeRefresh(null).catch(() => {}); cfg().then(c => SOLX.mevLeaders(rpcUrl(c))).catch(() => {}); } }, 15000);
-/* 3.29.18 sandwich validators: the list kept in storage ('mevBad'), the seed is in core.js */
-chrome.storage.local.get({ mevBad: {} }).then(o => { for (const l of Object.keys(o.mevBad || {})) SOLX.mevBad(l); }).catch(() => {});
+/* 3.29.18 sandwich validators: the list kept in storage ('mevBad'), the seed is in core.js.
+   3.29.25 (owner 1125, buys sent slowly and not landing): one catch put a validator on the list for ever, and a bot that bought before and
+   sold after a trade on a busy coin reads as a sandwich, so honest validators piled up and trades waited out their slots or skipped
+   resends. Now a validator is blocked only when it was caught twice in 24 h, and for 6 h after its last catch; ALp2Gd... (core.js)
+   stays blocked; the newest 50 kept. An old entry = one catch. */
+const MEV_DAY = 86400000, MEV_HOLD = 6 * 3600000;
+const mevHits = e => (Array.isArray(e && e.hits) ? e.hits : e && e.t ? [e.t] : []).filter(t => Date.now() - t < MEV_DAY);
+const mevOn = e => { const h = mevHits(e); return h.length >= 2 && Date.now() - Math.max(...h) < MEV_HOLD; };
+async function mevApply() { const { mevBad = {} } = await chrome.storage.local.get({ mevBad: {} }); SOLX.mevSet(Object.keys(mevBad).filter(l => mevOn(mevBad[l]))); }
+mevApply().catch(() => {}); setInterval(() => { mevApply().catch(() => {}); }, 600000);
 /* 3.29.19: the checks run one at a time (each reads ~14 transactions from the history), the newest 12 kept: a run of fast sells can not
    fill the node gate's history lane that the ledger booking also uses */
 const MEVQ = []; let mevRun = false;
@@ -1192,9 +1200,14 @@ async function mevCheck(c, sig, mint, side) {
   if (c.mevGuard === false || !mint || /^0x/i.test(mint)) return;
   const own = new Set((await walletsAll()).map(w => w.pub));
   const r = await SOLX.sandwichOf(sig, mint, side, own, rpcUrl(c)).catch(() => null); if (!r) return;
-  const known = SOLX.MEV.bad.has(r.leader); SOLX.mevBad(r.leader);
-  await MUT(async () => { const { mevBad = {} } = await chrome.storage.local.get({ mevBad: {} }); mevBad[r.leader] = { t: Date.now(), by: r.attacker, sig, mint }; await chrome.storage.local.set({ mevBad }); });
-  const msg = 'Sandwiched: validator ' + r.leader.slice(0, 6) + '… put a trade of ' + r.attacker.slice(0, 6) + '… right before yours and right after it' + (known ? ' (it was already on the list)' : '. It is on the block list now: your trades wait out its slots');
+  const was = SOLX.MEV.bad.has(r.leader); let on = false;
+  await MUT(async () => { const { mevBad = {} } = await chrome.storage.local.get({ mevBad: {} });
+    const hits = mevHits(mevBad[r.leader]).concat(Date.now()).slice(-10); mevBad[r.leader] = { t: Date.now(), hits, by: r.attacker, sig, mint };
+    for (const k of Object.keys(mevBad).sort((x, y) => (mevBad[y].t || 0) - (mevBad[x].t || 0)).slice(50)) delete mevBad[k];
+    await chrome.storage.local.set({ mevBad }); on = mevOn(mevBad[r.leader]); });
+  await mevApply().catch(() => {});
+  const msg = 'Sandwiched: validator ' + r.leader.slice(0, 6) + '… put a trade of ' + r.attacker.slice(0, 6) + '… right before yours and right after it'
+    + (r.leader === SOLX.MEV.seed ? ' (it is on the block list)' : on ? (was ? '. Caught again: blocked for 6 h more' : '. Second time in 24 h: blocked for 6 h, your trades wait out its slots') : '. Noted: a second time in 24 h blocks it for 6 h');
   for (const p of LIVE.ports) p.say({ mev: msg });
 }
 const wsUrl = c => { const u = rpcUrl(c); return u ? u.replace(/^https:/, 'wss:') : 'wss://solana-rpc.publicnode.com'; };

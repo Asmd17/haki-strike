@@ -853,7 +853,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
       if (/^Buy/.test(label)) { const a0 = A; setTimeout(() => { if (A === a0 && !PAPER && !(last && +last.raw > 0)) watchNow(); }, 3000); }   /* 3.29.4 */
       if (rr) fillNote(rr, r.sig).then(n => { if (n && S.title === msg) status(msg + n, 'ok'); }).catch(() => {});
     }
-    else { status(r.slow ? label + ': not landed in 45 s. Check the wallet on Solscan.' : label + ' failed: ' + r.why, 'bad'); window.hkSound('fail'); }
+    else { const hd = await send('mevHeld', { sig: r.sig || sig }).catch(() => null), held = hd && hd.ms > 50 ? ' (held ' + (hd.ms / 1000).toFixed(1) + ' s: sandwich validator ' + String(hd.who).slice(0, 6) + '… was making the slots)' : '';   /* 3.29.25 */
+      status(r.slow ? label + ': not landed in 45 s' + held + '. Check the wallet on Solscan.' : label + ' failed: ' + r.why + held, 'bad'); window.hkSound('fail'); }
   }
   /* after the worker sent the trade: one wallet as before; several wallets -> how many landed, and why the others did not */
   async function sent(r, label, t0) {
