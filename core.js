@@ -700,6 +700,32 @@ const SOLX = (() => {
     if (!(out > 0)) throw new Error('no price');
     return out / 1e9 * Number(raw) / Number(small);
   }
+  /* 3.29.23 (owner 1125, Dog on letsbonk: the panel said Holding 1.730 SOL, Axiom 1.293): coins on a Raydium LaunchLab curve (letsbonk and
+     the other LaunchLab launchpads; paired with SOL, USD1 or BONK) were valued at Jupiter's price, which lags on these curves by a minute or
+     more. Now the curve itself: constant product price (virtual_quote + real_quote) / (virtual_base - real_base) in the quote coin, then the
+     quote coin's SOL rate. Pool = PDA ["pool", mint, quote] of the LaunchLab program; a coin that is not on such a curve is remembered 10 min. */
+  const LLP = 'LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj', LLQ = [WSOL, 'USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB', 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'];
+  const LLC = new Map(), LLG = new Map();
+  function llOf(d) {   /* PoolState: status 17, decimals 18/19, supply 21, virtual / real base and quote 37..69, global_config 141, quote_mint 237 */
+    if (!d || d.length < 269) return null;
+    const vb = u64(d, 37), vq = u64(d, 45), rb = u64(d, 53), rq = u64(d, 61);
+    return { status: d[17], bdec: d[18], qdec: d[19], gc: keyAt(d, 141), quote: keyAt(d, 237), B: vb - rb, Q: vq + rq };
+  }
+  async function llState(m, url) {
+    const c = LLC.get(m); if (c && c.none && Date.now() - c.t < 600000) return null;
+    let pool = c && c.pool, d = null;
+    if (!pool) {
+      const P = await Promise.all(LLQ.map(q => pda([enc('pool'), b58d(m), b58d(q)], LLP))), A = await accs(P, url);
+      const i = A.findIndex(x => x && x.owner === LLP && x.data.length >= 269);
+      if (i < 0) { LLC.set(m, { none: true, t: Date.now() }); if (LLC.size > 2000) LLC.clear(); return null; }
+      pool = P[i]; d = A[i].data; LLC.set(m, { pool });
+    } else { const [x] = await accs([pool], url); d = x && x.data; }
+    const L = llOf(d); if (!L || L.status !== 0 || !(L.B > 0n) || !(L.Q > 0n)) return null;   /* migrated (or migrating): its pool is priced elsewhere */
+    let ct = LLG.get(L.gc); if (ct == null) { const [g] = await accs([L.gc], url); ct = g && g.data.length > 16 ? g.data[16] : -1; LLG.set(L.gc, ct); }
+    if (ct !== 0) return null;   /* only the constant product curve (letsbonk uses it) */
+    await quoteRate(L.quote); const rate = quoteRateCached(L.quote); if (!(rate > 0)) return null;
+    return Object.assign(L, { pool, px: Number(L.Q) / Number(L.B) * rate });   /* px: lamports per smallest unit of the coin */
+  }
   async function position(a, pub, url, known) {
     const m = await mintOf(a, url, known);
     let st = null; try { st = await pumpState(m, pub, url, 0); } catch (_) {}
@@ -715,6 +741,9 @@ const SOLX = (() => {
       } catch (_) {}
     }
     const { raw, dec } = st ? { raw: st.raw, dec: st.dec } : await tokBal(pub, m, url); let val = 0;
+    const L = await llState(m, url).catch(() => null);   /* 3.29.23 */
+    if (L) return { ok: true, mint: m, raw: raw.toString(), dec, ui: dec != null ? Number(raw) / 10 ** dec : 0, value_sol: Number(raw) * L.px / 1e9,
+      mc_sol: st && st.supply > 0n ? Number(st.supply) * L.px / 1e9 : null, kind: 'launchlab', ll: L.pool, llq: L.quote, ata: st && st.ata };
     if (raw > 0n) {
       const c = VC.get(m);
       /* 3.12.26 (owner 1120, float launchpad coin on Raydium CPMM: PnL slow and +11 % while Axiom showed +20 %): the value was a sell quote of
@@ -1677,6 +1706,6 @@ const SOLX = (() => {
     return null;
   }
   return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
-    CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64 };
+    CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64, llState, llOf };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

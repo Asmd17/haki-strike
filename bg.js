@@ -1308,6 +1308,25 @@ chrome.runtime.onConnect.addListener(port => {
       }
     }
     if (gen !== S.gen) return;
+    /* 3.29.23 (owner 1125, Dog on letsbonk: Holding 1.730 SOL here, 1.293 on Axiom; Jupiter's price of such coins lags): a coin on a Raydium
+       LaunchLab curve is valued from the curve itself, its pool account on the live feed (like pump.fun), the quote coin's SOL rate every 15 s */
+    if (p.kind === 'launchlab' && p.ll) {
+      try {
+        let L = null, rate = p.llq === SOLX.WSOL ? 1 : await SOLX.quoteRate(p.llq), lt = 0, ll = 0;
+        const lpaint = () => { if (lt) return; lt = setTimeout(() => { lt = 0; ll = Date.now(); if (gen !== S.gen || !L || !(rate > 0)) return;
+          const raw = total(), v = Number(raw) * (Number(L.Q) / Number(L.B) * rate) / 1e9;
+          post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length });
+        }, Math.max(0, 120 - (Date.now() - ll))); };
+        const take = d => { const x = SOLX.llOf(d); if (!x) return; if (x.status !== 0) { port.resub(); return; } if (x.B > 0n && x.Q > 0n) { L = x; lpaint(); } };
+        const [pa] = await SOLX.accs([p.ll], rpcUrl(c)); take(pa && pa.data);
+        S.ids.push(await wsSub(c, p.ll, v => { if (v) take(SOLX.unb64(v.data[0])); }));
+        for (const q of S.atas) S.ids.push(await wsSub(c, q.ata, (v, sl) => { const x = v && SOLX.unb64(v.data[0]), raw = x && x.length >= 72 ? SOLX.u64(x, 64) : 0n; if (setRaw(q.pub, raw, sl)) { lpaint(); syncSoon(q); } }));
+        if (p.llq !== SOLX.WSOL) S.rate = setInterval(() => { SOLX.quoteRate(p.llq).then(v => { if (v > 0) { rate = v; lpaint(); } }).catch(() => {}); }, 15000);
+        S.poll = setInterval(async () => { if (gen !== S.gen) return; const [x] = await SOLX.accs([p.ll], rpcUrl(c)).catch(() => [null]); take(x && x.data); }, 10000);   /* safety net */
+        if (gen !== S.gen) { stop(); return; }
+        return;
+      } catch (_) { /* polling below */ }
+    }
     /* 3.12.27 (owner 1120: float launchpad coin on Raydium CPMM, the PnL still not live): the coin's Raydium CPMM pool with SOL (its biggest
        on DexScreener), both vaults on the live feed: the price from the reserves on every change, like the PumpSwap pools. Else: polling. */
     try {
