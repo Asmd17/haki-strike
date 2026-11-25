@@ -1331,22 +1331,24 @@ chrome.runtime.onConnect.addListener(port => {
        on DexScreener), both vaults on the live feed: the price from the reserves on every change, like the PumpSwap pools. Else: polling. */
     try {
       const CPMM = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
-      const J = await (await fetch('https://api.dexscreener.com/tokens/v1/solana/' + p.mint)).json();
-      const pr = (Array.isArray(J) ? J : []).filter(x => x.dexId === 'raydium' && (x.labels || []).includes('CPMM') && [x.baseToken && x.baseToken.address, x.quoteToken && x.quoteToken.address].includes(SOLX.WSOL))
-        .sort((x, y) => ((y.liquidity || {}).usd || 0) - ((x.liquidity || {}).usd || 0))[0];
-      if (!pr || gen !== S.gen) throw new Error('no cpmm');
+      /* 3.29.24: the pool position() found (SOL, USD1, BONK, USDC or USDT; Dog: LaunchLab -> CPMM with BONK), valued at the quote coin's
+         SOL rate (every 15 s); a SOL pool found on DexScreener here as before when position() valued the coin another way */
+      let pool = p.cp || null;
+      if (!pool) { const J = await (await fetch('https://api.dexscreener.com/tokens/v1/solana/' + p.mint)).json();
+        const pr0 = (Array.isArray(J) ? J : []).filter(x => x.dexId === 'raydium' && (x.labels || []).includes('CPMM') && [x.baseToken && x.baseToken.address, x.quoteToken && x.quoteToken.address].includes(SOLX.WSOL))
+          .sort((x, y) => ((y.liquidity || {}).usd || 0) - ((x.liquidity || {}).usd || 0))[0]; pool = pr0 && pr0.pairAddress; }
+      if (!pool || gen !== S.gen) throw new Error('no cpmm');
+      const pr = { pairAddress: pool };
       const [pa] = await SOLX.accs([pr.pairAddress], rpcUrl(c)); if (!pa || pa.owner !== CPMM || pa.data.length < 373) throw new Error('not cpmm');
-      const d = pa.data, key = o => SOLX.b58e(d.slice(o, o + 32));
-      const v0 = key(72), v1 = key(104), m0 = key(168), m1 = key(200), dec0 = d[331], dec1 = d[332];
-      const fees = [SOLX.u64(d, 341) + SOLX.u64(d, 357), SOLX.u64(d, 349) + SOLX.u64(d, 365)];   /* protocol + fund fees sit in the vaults too */
-      const tokSide = m0 === p.mint ? 0 : m1 === p.mint ? 1 : -1; if (tokSide < 0 || (tokSide === 0 ? m1 : m0) !== SOLX.WSOL) throw new Error('not a SOL pool');
+      const K = SOLX.cpmmOf(pa.data, p.mint); if (!K) throw new Error('not this coin');
+      const v0 = K.v0, v1 = K.v1, tokSide = K.side, fees = K.kept;   /* protocol + fund + creator fees sit in the vaults too */
+      let rate = K.quote === SOLX.WSOL ? 1 : await SOLX.quoteRate(K.quote);
       const R = [null, null], amt = v => { const x = v && SOLX.unb64(v.data[0]); return x && x.length >= 72 ? SOLX.u64(x, 64) : null; };
       const T0 = await SOLX.accs([v0, v1], rpcUrl(c)); R[0] = T0[0] ? SOLX.u64(T0[0].data, 64) : null; R[1] = T0[1] ? SOLX.u64(T0[1].data, 64) : null;
-      const dec = tokSide === 0 ? dec0 : dec1;
       let gt = 0, gl = 0;
-      const gpaint = () => { if (gt) return; gt = setTimeout(() => { gt = 0; gl = Date.now(); if (gen !== S.gen || R[0] == null || R[1] == null) return;
-        const tok = Number(R[tokSide] - fees[tokSide]) / 10 ** dec, sol = Number(R[1 - tokSide] - fees[1 - tokSide]) / 1e9; if (!(tok > 0 && sol > 0)) return;
-        const raw = total(), v = Number(raw) / 10 ** p.dec * (sol / tok);
+      const gpaint = () => { if (gt) return; gt = setTimeout(() => { gt = 0; gl = Date.now(); if (gen !== S.gen || R[0] == null || R[1] == null || !(rate > 0)) return;
+        const tokRaw = Number(R[tokSide] - fees[tokSide]), qRaw = Number(R[1 - tokSide] - fees[1 - tokSide]); if (!(tokRaw > 0 && qRaw > 0)) return;
+        const raw = total(), v = Number(raw) * (qRaw * rate / tokRaw) / 1e9;
         post({ mint: S.mint, raw: raw.toString(), dec: p.dec, ui: Number(raw) / 10 ** p.dec, value_sol: v, usd: S.usd, pnl: S.L.length ? SOLX.pnlOf(S.L, v) : null, live: true, n: S.pubs.length });
       }, Math.max(0, 120 - (Date.now() - gl))); };
       S.ids.push(await wsSub(c, v0, v => { const x = amt(v); if (x != null) { R[0] = x; gpaint(); } }));
@@ -1354,10 +1356,11 @@ chrome.runtime.onConnect.addListener(port => {
       for (const q of S.atas) S.ids.push(await wsSub(c, q.ata, v => {   /* each wallet's token account */
         const x = v && SOLX.unb64(v.data[0]), raw = x && x.length >= 72 ? SOLX.u64(x, 64) : 0n; S.raws.set(q.pub, raw); gpaint(); syncSoon(q); }));
       if (gen !== S.gen) { stop(); return; }
+      if (K.quote !== SOLX.WSOL) S.rate = setInterval(() => { SOLX.quoteRate(K.quote).then(v => { if (v > 0) { rate = v; gpaint(); } }).catch(() => {}); }, 15000);
       gpaint();
       /* safety net: a direct read every 10 s (fees, a dead socket) */
       S.poll = setInterval(async () => { if (gen !== S.gen) return; const T = await SOLX.accs([pr.pairAddress, v0, v1], rpcUrl(c)).catch(() => null); if (!T || !T[0]) return;
-        fees[0] = SOLX.u64(T[0].data, 341) + SOLX.u64(T[0].data, 357); fees[1] = SOLX.u64(T[0].data, 349) + SOLX.u64(T[0].data, 365);
+        { const K2 = SOLX.cpmmOf(T[0].data, p.mint); if (K2) { fees[0] = K2.kept[0]; fees[1] = K2.kept[1]; } }
         if (T[1]) R[0] = SOLX.u64(T[1].data, 64); if (T[2]) R[1] = SOLX.u64(T[2].data, 64); gpaint(); }, 10000);
       return;
     } catch (_) { /* not a Raydium CPMM coin with SOL: polling below */ }

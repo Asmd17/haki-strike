@@ -726,6 +726,32 @@ const SOLX = (() => {
     await quoteRate(L.quote); const rate = quoteRateCached(L.quote); if (!(rate > 0)) return null;
     return Object.assign(L, { pool, px: Number(L.Q) / Number(L.B) * rate });   /* px: lamports per smallest unit of the coin */
   }
+  /* 3.29.24 (owner 1125, Dog after it left the LaunchLab curve for a Raydium CPMM pool with BONK: Holding 1.868 SOL here, 2.494 on Axiom):
+     a coin whose market is a Raydium CPMM pool with SOL, USD1, BONK, USDC or USDT is valued from that pool's vaults (minus the protocol,
+     fund and creator fees kept in them) times the quote coin's SOL rate, not at Jupiter's lagging price. The pool: its biggest such pair on
+     DexScreener, looked up once per 10 min. */
+  const CPMMP = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C', CPQ = new Set([WSOL, 'USD1ttGY1N17NEEHLmELoaybftRBUSErhqYiQzvEmuB', 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB']), CPC = new Map();
+  async function cpmmPool(m) {
+    const c = CPC.get(m); if (c && Date.now() - c.t < 600000) return c.pool;
+    const J = await (await fetch('https://api.dexscreener.com/tokens/v1/solana/' + m)).json();
+    const other = x => (x.baseToken || {}).address === m ? (x.quoteToken || {}).address : (x.quoteToken || {}).address === m ? (x.baseToken || {}).address : null;
+    const pr = (Array.isArray(J) ? J : []).filter(x => x.dexId === 'raydium' && (x.labels || []).includes('CPMM') && CPQ.has(other(x))).sort((x, y) => ((y.liquidity || {}).usd || 0) - ((x.liquidity || {}).usd || 0))[0];
+    CPC.set(m, { pool: pr ? pr.pairAddress : null, t: Date.now() }); if (CPC.size > 2000) CPC.clear(); return pr ? pr.pairAddress : null;
+  }
+  function cpmmOf(d, m) {   /* pool_state: vaults 72/104, mints 168/200, fees kept in the vaults 341..373 (+ creator 397/405) */
+    if (!d || d.length < 373) return null; const m0 = keyAt(d, 168), m1 = keyAt(d, 200), side = m0 === m ? 0 : m1 === m ? 1 : -1; if (side < 0) return null;
+    const cf = d.length >= 413 ? [u64(d, 397), u64(d, 405)] : [0n, 0n];
+    return { v0: keyAt(d, 72), v1: keyAt(d, 104), side, quote: side === 0 ? m1 : m0, kept: [u64(d, 341) + u64(d, 357) + cf[0], u64(d, 349) + u64(d, 365) + cf[1]] };
+  }
+  async function cpmmState(m, url) {
+    const pool = await cpmmPool(m); if (!pool) return null;
+    const [pa] = await accs([pool], url); if (!pa || pa.owner !== CPMMP) return null; const K = cpmmOf(pa.data, m); if (!K || !CPQ.has(K.quote)) return null;
+    const [a0, a1] = await accs([K.v0, K.v1], url); if (!a0 || !a1) return null;
+    const R = [u64(a0.data, 64) - K.kept[0], u64(a1.data, 64) - K.kept[1]]; if (!(R[0] > 0n && R[1] > 0n)) return null;
+    await quoteRate(K.quote); const rate = quoteRateCached(K.quote); if (!(rate > 0)) return null;
+    return Object.assign(K, { pool, px: Number(R[1 - K.side]) * rate / Number(R[K.side]) });   /* px: lamports per smallest unit of the coin */
+  }
   async function position(a, pub, url, known) {
     const m = await mintOf(a, url, known);
     let st = null; try { st = await pumpState(m, pub, url, 0); } catch (_) {}
@@ -744,6 +770,9 @@ const SOLX = (() => {
     const L = await llState(m, url).catch(() => null);   /* 3.29.23 */
     if (L) return { ok: true, mint: m, raw: raw.toString(), dec, ui: dec != null ? Number(raw) / 10 ** dec : 0, value_sol: Number(raw) * L.px / 1e9,
       mc_sol: st && st.supply > 0n ? Number(st.supply) * L.px / 1e9 : null, kind: 'launchlab', ll: L.pool, llq: L.quote, ata: st && st.ata };
+    const K = await cpmmState(m, url).catch(() => null);   /* 3.29.24 */
+    if (K) return { ok: true, mint: m, raw: raw.toString(), dec, ui: dec != null ? Number(raw) / 10 ** dec : 0, value_sol: Number(raw) * K.px / 1e9,
+      mc_sol: st && st.supply > 0n ? Number(st.supply) * K.px / 1e9 : null, kind: 'cpmm', cp: K.pool, ata: st && st.ata };
     if (raw > 0n) {
       const c = VC.get(m);
       /* 3.12.26 (owner 1120, float launchpad coin on Raydium CPMM: PnL slow and +11 % while Axiom showed +20 %): the value was a sell quote of
@@ -1706,6 +1735,6 @@ const SOLX = (() => {
     return null;
   }
   return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
-    CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64, llState, llOf };
+    CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64, llState, llOf, cpmmOf, cpmmState };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;
