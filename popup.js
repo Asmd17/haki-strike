@@ -354,7 +354,8 @@ $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 /* ---- BSC wallet (3.14.0) ---- */
 async function paintBsc() {
   const r = await ask('bscWallet');
-  $('bExp').hidden = !r || !!r.none;
+  $('bExp').hidden = !r || !!r.none; $('dsBox').hidden = !r || !!r.none;
+  chrome.storage.local.get({ moralisKey: '' }).then(o => { $('dsKey').placeholder = o.moralisKey ? 'saved (paste a new one to replace it)' : 'paste it once'; }).catch(() => {});
   if (!r || r.none) { $('bList').innerHTML = ''; $('bList').hidden = true; $('bNew').hidden = false; $('bPl').hidden = false; return; }
   $('bNew').hidden = true; $('bList').hidden = false;
   $('bList').innerHTML = '<div class="wi"><span class="av" aria-hidden="true" style="background:#F0B90B;color:#000">B</span><span class="t"><b>' + esc(r.label || 'BSC wallet') + '</b><i>' + esc(r.addr.slice(0, 6) + '…' + r.addr.slice(-6)) + '</i></span>'
@@ -371,6 +372,31 @@ $('bxGo').onclick = async () => {
   $('bxKey').value = r.key; $('bxOut').hidden = false; say('bst', 'Shown for 60 s (wallet ' + r.addr + ')', 'ok'); clearTimeout(bxT); bxT = setTimeout(bxHide, 60000);
 };
 $('bxCopy').onclick = async () => { try { await navigator.clipboard.writeText($('bxKey').value); say('bst', 'Copied', 'ok'); } catch (_) { $('bxKey').select(); } };
+/* 3.29.34 Sell dust: the BNB wallet's coins from Moralis, each one under your limit sold to BNB through ParaSwap, one at a time */
+let DS = [], dsRun = false, dsStop = false;
+$('dsKeyGo').onclick = async () => { const k = $('dsKey').value.trim(); if (!k) return; await chrome.storage.local.set({ moralisKey: k }); $('dsKey').value = ''; $('dsKey').placeholder = 'saved (paste a new one to replace it)'; say('bst', 'Moralis key saved', 'ok'); };
+$('dsFind').onclick = async () => {
+  if (dsRun) return; $('dsFind').disabled = true; $('dsInfo').textContent = 'Reading the wallet\u2019s coins…'; $('dsLog').innerHTML = '';
+  const r = await ask('bscDustList'); $('dsFind').disabled = false;
+  if (!r || r.err) { $('dsInfo').textContent = (r && r.err) || 'no answer'; return; }
+  DS = r.list; const usd = DS.reduce((s, x) => s + (x.usd || 0), 0), spam = DS.filter(x => x.spam).length;
+  $('dsInfo').textContent = DS.length + ' coins on ' + r.addr.slice(0, 6) + '…' + r.addr.slice(-4) + (usd ? ' · ≈ $' + usd.toFixed(2) + ' by Moralis prices' : '') + (spam ? ' · ' + spam + ' look like airdrop spam' : '') + '. Sell dust tries each one and leaves what is worth more than your limit.';
+  $('dsGo').disabled = !DS.length;
+};
+$('dsGo').onclick = async () => {
+  if (dsRun) { dsStop = true; $('dsGo').textContent = 'Stopping…'; return; }
+  const max = +String($('dsMax').value).replace(',', '.'); if (!(max > 0)) { say('bst', 'Type the dust limit in BNB', 'bad'); return; }
+  dsRun = true; dsStop = false; $('dsGo').textContent = 'Stop'; $('dsFind').disabled = true;
+  let sold = 0, got = 0, skip = 0; const L = DS.slice(), log = (t, k) => { const d = document.createElement('div'); d.textContent = t; if (k) d.style.color = k === 'ok' ? 'var(--up, #2fd28a)' : ''; $('dsLog').prepend(d); };
+  for (let i = 0; i < L.length && !dsStop; i++) {
+    const x = L[i]; $('dsInfo').textContent = (i + 1) + ' / ' + L.length + ' · sold ' + sold + ' for ' + got.toFixed(5) + ' BNB · left alone ' + skip + ' · now ' + (x.sym || x.token.slice(0, 8));
+    const r = await ask('bscDustOne', { token: x.token, maxBnb: max });
+    if (r && r.ok) { sold++; got += +r.bnb || 0; log((x.sym || x.token.slice(0, 8)) + ': sold for ' + (+r.bnb).toFixed(6) + ' BNB', 'ok'); }
+    else { skip++; log((x.sym || x.token.slice(0, 8)) + ': ' + ((r && (r.skip || r.err || r.st)) || 'no answer')); }
+  }
+  $('dsInfo').textContent = (dsStop ? 'Stopped. ' : 'Done. ') + 'Sold ' + sold + ' coins for ≈ ' + got.toFixed(5) + ' BNB · left alone ' + skip + '.';
+  dsRun = false; $('dsGo').textContent = 'Sell dust'; $('dsFind').disabled = false; paintBsc();
+};
 $('bGo').onclick = async () => {
   say('bst', 'Adding…'); const r = await ask('bscImport', { secret: $('bKey').value, pass: $('bPass').value });
   $('bKey').value = ''; $('bPass').value = '';

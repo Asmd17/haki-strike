@@ -968,6 +968,15 @@ async function handle(m) {
     let key; try { key = await SOLX.unseal(w.box, String(a.pass || ''), bscChk(w.box)); } catch (_) { throw new Error('wrong password'); }
     return { addr: w.addr, key: EVM.bytesToHex(key) };
   }
+  if (m.op === 'bscDustList') {   /* 3.29.34 Sell dust: the BNB wallet's coins (Moralis, your free key) */
+    const w = (await bwalletsAll())[0]; if (!w) throw new Error('add your BSC wallet first');
+    const { moralisKey = '' } = await chrome.storage.local.get({ moralisKey: '' }); if (!String(moralisKey).trim()) throw new Error('paste your free Moralis API key first');
+    return { addr: w.addr, list: await BSC.holdings(w.addr, String(moralisKey).trim()) };
+  }
+  if (m.op === 'bscDustOne') {   /* one coin of the dust list -> BNB through ParaSwap (bsc.js dustSell) */
+    const { addr, key } = await bscKey();
+    return BSC.dustSell(a.token, addr, key, Math.round((+c.bscSlip || 15) * 100), +a.maxBnb > 0 ? +a.maxBnb : 0);
+  }
   if (m.op === 'bscForget') { await chrome.storage.local.set({ bwallets: [] }); await chrome.storage.local.remove('bkeep'); await chrome.storage.session.remove('bseeds'); return { ok: true }; }
   if (m.op === 'bscWallet') {   /* address, label, unlocked, BNB */
     const w = (await bwalletsAll())[0]; if (!w) return { none: true };
@@ -1490,7 +1499,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return false;
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
-  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'bscExport', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
+  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'bscExport', 'bscDustList', 'bscDustOne', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
   if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
   /* 3.29.31: a BigInt can not travel back to the page (Chrome passes replies as JSON): such a reply was lost and the page waited for nothing */
   const safe = v => { try { JSON.stringify(v); return v; } catch (_) { try { return JSON.parse(JSON.stringify(v, (k, x) => typeof x === 'bigint' ? x.toString() : x)); } catch (__) { return v; } } };

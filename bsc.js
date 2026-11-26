@@ -184,7 +184,7 @@ const BSC = (() => {
       for (const p of L) p.then(h => res(h), e => { errs.push(String(e.message || e).slice(0, 80)); if (!--left) rej(new Error('no relay took it: ' + errs.slice(0, 3).join('; '))); }); });
   }
   async function signSend(tx, key, me, n, gp) {
-    const s = await E.signTx({ nonce: n, gasPrice: gp, gasLimit: GAS[tx.gk] || 600000, to: tx.to, value: tx.value || 0n, data: tx.data, chainId: 56 }, key);
+    const s = await E.signTx({ nonce: n, gasPrice: gp, gasLimit: tx.gas || GAS[tx.gk] || 600000, to: tx.to, value: tx.value || 0n, data: tx.data, chainId: 56 }, key);
     const via = await sendRaw(s.raw); return { hash: s.hash, via };
   }
   async function allowance(token, me, spender) { return words(await rpc('eth_call', [{ to: token, data: E.call('allowance(address,address)', [me, spender]) }, 'latest']))[0] || 0n; }
@@ -247,6 +247,53 @@ const BSC = (() => {
     for (const h of ins) { const t = await rpc('eth_getTransactionByHash', [h]).catch(() => null); if (t && low(t.from) === low(me) && BigInt(t.value || 0) > 0n) { bin += Number(BigInt(t.value)) / 1e18; nb++; } }
     return { in: bin, nb, sells: 0 };
   }
+  /* ---- 3.29.34 Sell dust (owner 1126: "300+ coins of dust on BNB, they must be sold"). Most of it is tokenized stocks and big coins
+     (Ondo stocks, DOGE, ASTER...) with no four.meme / Flap / WBNB pool, so it is sold through ParaSwap (api.paraswap.io, free, finds a
+     pool on any BNB Chain exchange). The wallet's coin list comes from Moralis (free key in Settings): no free node lists an address's
+     coins any more (checked 1126: 11 public nodes, BscScan / Etherscan paid for BNB Chain, Ankr needs a key).
+     One coin at a time: ParaSwap price -> skipped if it brings less than twice its gas -> approve ParaSwap's Augustus (once per coin, waits
+     for its block) -> the swap is simulated (eth_estimateGas) -> sent -> waits for its block. Signed only when ParaSwap's call goes to
+     Augustus v6.2 itself, sends no BNB and names your wallet as the receiver. ---- */
+  const AUG = '0x6a000f20005980200259b80c5102003040001068', NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', PSW = 'https://api.paraswap.io';
+  async function holdings(me, key) {
+    const out = []; let cursor = '';
+    for (let i = 0; i < 30; i++) {
+      const r = await fetch('https://deep-index.moralis.io/api/v2.2/wallets/' + me + '/tokens?chain=bsc&limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), { headers: { 'X-API-Key': key, accept: 'application/json' } });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j) throw new Error('Moralis: ' + String((j && (j.message || j.error)) || ('HTTP ' + r.status)).slice(0, 140));
+      for (const t of j.result || []) { if (t.native_token || !/^0x[0-9a-fA-F]{40}$/.test(String(t.token_address || ''))) continue; let raw = 0n; try { raw = BigInt(t.balance || 0); } catch (_) {}
+        if (raw > 0n) out.push({ token: low(t.token_address), sym: String(t.symbol || '').slice(0, 16), dec: +t.decimals || 18, raw: raw.toString(), usd: +t.usd_value || 0, spam: !!t.possible_spam }); }
+      cursor = j.cursor || ''; if (!cursor) break;
+    }
+    return out;
+  }
+  async function waitRc(hash, ms = 25000) { for (const t0 = Date.now(); Date.now() - t0 < ms;) { await new Promise(z => setTimeout(z, 350)); const r = await receipt(hash).catch(() => null); if (r && r.st !== 'pending') return r; } return { st: 'pending' }; }
+  async function dustSell(token, me, key, slipBps, maxBnb) {
+    const t = low(token); if (!/^0x[0-9a-f]{40}$/.test(t)) return { skip: 'bad address' };
+    const [raw, d0] = await Promise.all([balanceOf(t, me), rpc('eth_call', [{ to: t, data: E.call('decimals()', []) }, 'latest']).catch(() => null)]);
+    if (!(raw > 0n)) return { skip: 'none left' };
+    const dec = d0 ? Number(words(d0)[0] || 18n) : 18;
+    const pr = await fetch(PSW + '/prices?srcToken=' + t + '&srcDecimals=' + dec + '&destToken=' + NATIVE + '&destDecimals=18&amount=' + raw + '&network=56&side=SELL&version=6.2&userAddress=' + me);
+    const pj = await pr.json().catch(() => null), R = pj && pj.priceRoute;
+    if (!R) return { skip: 'no market' + (pj && pj.error ? ' (' + String(pj.error).slice(0, 60) + ')' : '') };
+    if (low(R.contractAddress) !== AUG || low(R.tokenTransferProxy) !== AUG) return { skip: 'ParaSwap named another contract: not used' };
+    const out = BigInt(R.destAmount || 0), bnbOut = Number(out) / 1e18;
+    if (maxBnb > 0 && bnbOut > maxBnb) return { skip: 'worth more than your dust limit', bnb: bnbOut };
+    const [gp, al] = await Promise.all([gasPrice(0), allowance(t, me, AUG)]), need = al < raw;
+    if (out < gp * (BigInt(R.gasCost || 300000) + (need ? 60000n : 0n)) * 2n) return { skip: 'worth less than the gas', bnb: bnbOut };
+    const res = { bnb: bnbOut };
+    if (need) { const n0 = await nonceOf(me); let a;
+      try { a = await signSend({ to: t, value: 0n, data: E.call('approve(address,uint256)', [AUG, MAXU]), gk: 'approve' }, key, me, n0, gp); } catch (e) { nonceBack(me, n0); return { skip: 'approve not sent: ' + String(e.message).slice(0, 80) }; }
+      const ar = await waitRc(a.hash); if (ar.st !== 'confirmed') return { skip: 'approve ' + ar.st, approve: a.hash }; res.approve = a.hash; }
+    const bj = await (await fetch(PSW + '/transactions/56?ignoreChecks=true&ignoreGasEstimate=true', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ srcToken: t, srcDecimals: dec, destToken: NATIVE, destDecimals: 18, srcAmount: R.srcAmount, slippage: Math.max(50, Math.min(5000, slipBps)), priceRoute: R, userAddress: me, receiver: me }) })).json().catch(() => null);
+    if (!bj || low(bj.to) !== AUG || BigInt(bj.value || 0) !== 0n || !String(bj.data || '').toLowerCase().includes(low(me).slice(2))) return Object.assign(res, { skip: 'ParaSwap built an unexpected call: not signed' });
+    const g = await rpc('eth_estimateGas', [{ from: me, to: AUG, value: '0x0', data: bj.data }]).then(x => Number(BigInt(x)), e => ({ err: String(e.message).slice(0, 80) }));
+    if (typeof g !== 'number') return Object.assign(res, { skip: 'the sell would fail (' + g.err + ')' });
+    const n = await nonceOf(me); let s;
+    try { s = await signSend({ to: AUG, value: 0n, data: bj.data, gas: Math.ceil(g * 1.3) }, key, me, n, gp); } catch (e) { nonceBack(me, n); return Object.assign(res, { skip: 'not sent: ' + String(e.message).slice(0, 80) }); }
+    const sr = await waitRc(s.hash); return Object.assign(res, { hash: s.hash, st: sr.st, ok: sr.st === 'confirmed' });
+  }
   async function preApprove(r, key, me, gp) {
     const spender = r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'pancake_v2q' ? C.V2R : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null; if (!spender) return;
     await new Promise(s => setTimeout(s, 4000));
@@ -268,6 +315,6 @@ const BSC = (() => {
     return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;
