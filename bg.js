@@ -37,8 +37,12 @@ chrome.runtime.onInstalled.addListener(async d => {
 /* 3.29.27 (owner 1125: "three presets: 1 the cheapest, 2 faster, 3 the speed of light; sells must always go through whatever the volatility"):
    P1 ~0.0004 SOL a trade (priority 0.0002 + tip 0.0002: Helius Sender's SWQOS lane), P2 ~0.002 (0.001 + 0.001: Jito and SWQOS at once),
    P3 ~0.01 (0.005 + 0.005: top of the block and of Jito's auction). Sells 100 % slippage on all three: a sell never fails on price. */
-const PRESETS = [{ slip: 20, prio: 0.0002, tip: 0.0002, sslip: 100 }, { slip: 25, prio: 0.001, tip: 0.001, sslip: 100 }, { slip: 30, prio: 0.005, tip: 0.005, sslip: 100 }];
-const DEF = { autoSpeed: false, feeMig: 0, presetMig: 0, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
+/* 3.29.29 (owner 1126: "I do not want to pay more, I want my trades to land in under a second and never fail"): the speed is bought by
+   the first ~0.001 SOL of priority (with HAKI's tight compute limits that is 8-16M micro-lamports a unit, the top of a block) and a 0.001
+   tip (the least at which Helius Sender sends to Jito and the SWQOS lanes at once); P3's 0.005 + 0.005 paid 5x for almost nothing.
+   P3 = priority 0.002 + tip 0.001 (~0.003 SOL a trade): twice P2's place in the block when many trade the same coin in the same slot. */
+const PRESETS = [{ slip: 20, prio: 0.0002, tip: 0.0002, sslip: 100 }, { slip: 25, prio: 0.001, tip: 0.001, sslip: 100 }, { slip: 30, prio: 0.002, tip: 0.001, sslip: 100 }];
+const DEF = { autoSpeed: false, feeMig: 0, presetMig: 0, presetMig2: 0, oneTx: true, autoSlip: true, mevGuard: true, bscBuys: [0.01, 0.05, 0.1, 0.25], bscBuys2: [0.02, 0.2, 0.5, 1], buys2: [0.25, 2, 5, 10], sells2: [33, 55, 75, 90], bscSlip: 15, bscGwei: 0, maxBnb: 2, sellExact: true, exactTol: 2, exactTolBuy: 5, buys: [0.1, 0.5, 1, 3.5], sells: [25, 50, 75, 100], quick: 0.1, slip: 20, tip: 0.001, tipMig: 0, presets: null, preset: 0, hk: true, hkMod: 'none', hkBuy: ['q', 'w', 'e', 'r'], hkSell: ['a', 's', 'd', 'f'], pulse: true, maxSol: 5, rpc: '', jupKey: '',
   cTexts: [], cAuto: false, cMin: 0.5, sound: true, vol: 0.7, ui: 0.85, pz: 1, autoFee: 'off', spamW: '', spamN: 5, spamFresh: true, feeTo: '' };
 
 /* pump.fun Callout from the panel: the same requests pump.fun's own Callout button sends, with your pump.fun login in this Chrome
@@ -255,6 +259,10 @@ async function cfg() {
     c.presets = c.presets.map((p, i) => Object.assign({}, p, { prio: PRESETS[i].prio, tip: PRESETS[i].tip, sprio: PRESETS[i].prio, stip: PRESETS[i].tip, sslip: 100 }));
     c.presetMig = 1; c.autoFee = 'off'; c.autoSpeed = false; SPD.f = [1, 1, 1]; SPD.g = [0, 0, 0]; spdSave();
     chrome.storage.local.set({ presets: c.presets, presetMig: 1, autoFee: 'off', autoSpeed: false }).catch(() => {});
+  }
+  if (!c.presetMig2) {   /* 3.29.29 once: P2 and P3 get the fees above (buy and sell); P1, slippage and the rest stay yours */
+    c.presets = c.presets.map((p, i) => i ? Object.assign({}, p, { prio: PRESETS[i].prio, tip: PRESETS[i].tip, sprio: PRESETS[i].prio, stip: PRESETS[i].tip }) : p);
+    c.presetMig2 = 1; chrome.storage.local.set({ presets: c.presets, presetMig2: 1 }).catch(() => {});
   }
   c.preset = [0, 1, 2].includes(+c.preset) ? +c.preset : 0;
   const a = c.presets[c.preset]; c.slip = a.slip; c.prio = a.prio; c.tip = a.tip; c.sslip = a.sslip; c.sprio = a.sprio; c.stip = a.stip;
