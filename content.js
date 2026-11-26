@@ -719,7 +719,7 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
         await bled(a, X => { if (!X.nb && !X.ns) { X.in = s.in; X.nb = s.nb; } }); if (a === A) bscPoll(true); }); }
     paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null, aslip: p.aslip,
       pnl: L.nb || L.ns ? { bought: L.in, sold: L.out, pnl, pct: L.in > 0 ? pnl / L.in * 100 : null, gas: 0, nb: L.nb, ns: L.ns } : null });
-    if (!has && p.route && !['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3'].includes(p.route) && !S.title) status(p.why || 'no BNB market found for this coin', 'bad');
+    if (!has && p.route && !['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3', 'openfour'].includes(p.route) && !S.title) status(p.why || 'no BNB market found for this coin', 'bad');
   }
   const watchNow = () => {
     clearInterval(bscT); bscT = 0;

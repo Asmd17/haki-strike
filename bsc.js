@@ -10,11 +10,11 @@ const BSC = (() => {
     TM2: '0x5c952063c7fc8610FFDB798152D69F0B9550762b', HELPER: '0xF251F83e40a78868FcfA3FA4599Dad6494E46034', FLAP: '0xe2cE6ab80874Fa9Fa2aAE65D277Dd6B8e65C9De0',
     WBNB: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', V2R: '0x10ED43C718714eb63d5aA57B78B54704E256024E', V2F: '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73',
     V3F: '0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865', SR: '0x13f4EA83D0bd40E75C8222255bc855a974568Dd4', V3Q: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997' };
-  const GAS = { four_x_buy: 1300000, four_x_sell: 1200000, four_buy: 650000, four_sell: 450000, flap_buy: 1000000, flap_sell: 1000000, v2_buy: 600000, v2_sell: 800000, v3_buy: 600000, v3_sell: 700000, approve: 90000 };
+  const GAS = { of_buy: 2600000, of_sell: 2600000, four_x_buy: 1300000, four_x_sell: 1200000, four_buy: 650000, four_sell: 450000, flap_buy: 1000000, flap_sell: 1000000, v2_buy: 600000, v2_sell: 800000, v3_buy: 600000, v3_sell: 700000, approve: 90000 };
   const READ = ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io', 'https://rpc.48.club'];
   const SEND = ['https://rpc.48.club', 'https://puissant-builder.48.club', 'https://bsc.blockrazor.xyz', 'https://ger-bscscutum.blockrazor.xyz', 'https://bsc.rpc.blxrbdn.com',
     'https://bscrpc.pancakeswap.finance', 'https://bsc.merkle.io', 'https://rpc.bsc.jetbldr.xyz'];
-  const ROUTES = ['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3'];
+  const ROUTES = ['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3', 'openfour'];
   const MAXU = (1n << 256n) - 1n, low = a => String(a).toLowerCase();
 
   /* ---------- RPC ---------- */
@@ -46,6 +46,55 @@ const BSC = (() => {
   const ec = (to, data) => ['eth_call', [{ to, data }, 'latest']];
   const words = h => { h = String(h || '').replace(/^0x/, ''); const o = []; for (let i = 0; i + 64 <= h.length; i += 64) o.push(BigInt('0x' + h.substr(i, 64))); return o; };
   const wAddr = w => '0x' + w.toString(16).padStart(40, '0');
+
+  /* ---------- 3.29.35 OpenFour (four.meme's modular launches; owner 1126, WHAT IF 0x99519b..ffff: "no BNB market found") ----------
+     The coin sits on a curve run by OpenFour's manager (0xebe7b6..), quoted in a token of its own (BNC4 on WHAT IF), and is bought and
+     sold through four.meme's swap router (0x1de460..) along a path BNB -> USDT -> quote -> curve, ~1.8M gas. There is no public ABI: the
+     path is learned from the coin's own latest trades through that router (or its twin 0x3508dc..), checked (starts at WBNB / the coin,
+     the curve step goes to OpenFour's manager), and every trade is quoted by simulating the router call itself (it returns the amount out). */
+  const OF = { MGR: '0xebe7b6c1089d9f72ad07f34e36d898e44e5e27f3', R: '0x1de460f363af910f51726def188f9004276bf4bc', R2: '0x3508dca95a64c9378cb07ef6f40553a50905372a', QF: '0x00000000000000000000000000000000000ff0f4' };
+  const OFSIG = 'swap((uint8,address,address,address,uint24,int24,address,bytes,address,bytes32)[],address,uint256,uint256,uint256)', OFP = new Map();
+  const OFHD = s => '0x' + (s === 'buy' ? ['1', '0', '0', '80', '0'] : ['0', '0', '1', '80', '0']).map(x => x.padStart(64, '0')).join('');
+  function ofDecode(input) {   /* swap(Step[], address, uint256, uint256[, uint256]) -> the Step tuples */
+    const h = String(input).slice(10), W = i => h.slice(i * 64, i * 64 + 64), N = x => BigInt('0x' + x), A = x => '0x' + x.slice(24), off = Number(N(W(0))) / 32, len = Number(N(W(off))), P = [];
+    for (let i = 0; i < len && i < 6; i++) { const so = off + 1 + Number(N(W(off + 1 + i))) / 32, bo = so + Number(N(W(so + 7))) / 32, bl = Number(N(W(bo)));
+      P.push([Number(N(W(so))), A(W(so + 1)), A(W(so + 2)), A(W(so + 3)), Number(N(W(so + 4))), Number(BigInt.asIntN(256, N(W(so + 5)))), A(W(so + 6)), '0x' + h.slice((bo + 1) * 64, (bo + 1) * 64 + bl * 2), A(W(so + 8)), '0x' + W(so + 9)]); }
+    return P;
+  }
+  const ofOk = (P, a, side) => P.length >= 1 && P.length <= 5 && (side === 'buy' ? low(P[0][1]) === low(C.WBNB) && low(P[P.length - 1][2]) === a && P[P.length - 1][0] === 9 && low(P[P.length - 1][3]) === OF.MGR
+    : low(P[0][1]) === a && P[0][0] === 9 && low(P[0][3]) === OF.MGR && low(P[P.length - 1][2]) === low(C.WBNB));
+  async function ofPaths(a) {
+    const c = OFP.get(a); if (c && Date.now() - c.t < 600000) return c;
+    const T = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', U = [READ[0]], hx = v => '0x' + v.toString(16);
+    const top = parseInt(await rpc('eth_blockNumber', [], U), 16), seen = new Set(); let buy = null, sell = null, n = 0;
+    for (let k = 0; k < 3 && !(buy && sell) && n < 30; k++) {
+      const L = await rpc('eth_getLogs', [{ address: a, fromBlock: hx(top - k * 9000 - 8999), toBlock: hx(top - k * 9000), topics: [T] }], U).catch(() => []);
+      for (const l of (L || []).reverse()) { if (buy && sell || n >= 30) break; if (seen.has(l.transactionHash)) continue; seen.add(l.transactionHash);
+        const x = await rpc('eth_getTransactionByHash', [l.transactionHash], U).catch(() => null); n++;
+        if (!x || ![OF.R, OF.R2].includes(low(x.to)) || !/^0x(4d819a2a|0b3f5cf9)/.test(x.input)) continue;
+        let P; try { P = ofDecode(x.input); } catch (_) { continue; }
+        if (!buy && ofOk(P, a, 'buy')) buy = P; else if (!sell && ofOk(P, a, 'sell')) sell = P; }
+    }
+    if (!buy && !sell) return null;
+    const rev = (P, s) => P.slice().reverse().map(st => { const q = st.slice(); [q[1], q[2]] = [st[2], st[1]]; if (q[0] === 9) q[7] = OFHD(s); return q; });
+    const out = { buy: buy || rev(sell, 'buy'), sell: sell || rev(buy, 'sell'), t: Date.now() }; OFP.set(a, out); return out;
+  }
+  /* a sell is quoted before the router may pull the coin (the first sell approves it in the same click): the simulation alone gets the
+     allowance, written into the coin's own allowance slot (found once by eth_createAccessList); nothing on chain changes */
+  const OFS = new Map();
+  async function ofAllowSlot(a, me) {
+    const k = a + '|' + low(me); if (OFS.has(k)) return OFS.get(k);
+    const x = await rpc('eth_createAccessList', [{ from: me, to: a, data: E.call('allowance(address,address)', [me, OF.R]) }, 'latest'], [READ[0]]).catch(() => null);
+    const K = (((x && x.accessList) || []).find(y => low(y.address) === a) || {}).storageKeys || [], key = K.length === 1 ? K[0] : null; OFS.set(k, key); return key;
+  }
+  async function ofQuote(r, side, amt, me, urls) {
+    const data = E.call(OFSIG, [side === 'buy' ? r.paths.buy : r.paths.sell, ZERO, amt, 1n, BigInt(Math.floor(Date.now() / 1000) + 120)]);
+    let res;
+    if (side === 'buy') res = await rpc('eth_call', [{ from: OF.QF, to: OF.R, value: '0x' + amt.toString(16), data }, 'latest', { [OF.QF]: { balance: '0x' + (10n ** 24n).toString(16) } }], urls);
+    else { const sk = await ofAllowSlot(r.token, me).catch(() => null);
+      res = await rpc('eth_call', sk ? [{ from: me, to: OF.R, data }, 'latest', { [r.token]: { stateDiff: { [sk]: '0x' + amt.toString(16).padStart(64, '0') } } }] : [{ from: me, to: OF.R, data }, 'latest'], urls); }
+    return words(res)[0] || 0n;
+  }
 
   /* ---------- the coin: which venue trades it ---------- */
   const RC = new Map();   /* token -> {route, ...} for 20 s */
@@ -95,6 +144,7 @@ const BSC = (() => {
         }
       }
     }
+    if (!out) { const p = await ofPaths(a).catch(() => null); if (p) out = { route: 'openfour', venue: 'OpenFour', paths: p }; }   /* 3.29.35 */
     if (!out) out = { route: 'none', why: 'no BNB market found for this coin' };
     let sym = ''; try { const w = String(R[9] || ''); if (w.length > 130) { const n = Number(BigInt('0x' + w.slice(66, 130))); sym = new TextDecoder().decode(E.hexToBytes('0x' + w.slice(130, 130 + n * 2))); } } catch (_) {}
     Object.assign(out, { t: Date.now(), token: a, dec, supply, sym }); RC.set(a, out); return out;
@@ -117,6 +167,7 @@ const BSC = (() => {
     return w[0];
   }
   async function quote(r, side, amt, urls) {
+    if (r.route === 'openfour') return ofQuote(r, side, amt, r.me, urls);
     if (r.route === 'four_x') {   /* BNB -> quote on PancakeSwap V2, then the curve (Helper3 tryBuy / trySell); sells the other way */
       if (side === 'buy') { const q = await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [amt, [C.WBNB, r.quote]]) }, 'latest'], urls), qw = words(q); const qa = qw[qw.length - 1] || 0n;
         const t = words(await rpc('eth_call', [{ to: C.HELPER, data: E.call('tryBuy(address,uint256,uint256)', [r.token, 0, qa]) }, 'latest'], urls)); return t[2] || 0n; }
@@ -141,6 +192,8 @@ const BSC = (() => {
   /* ---------- the transaction (HAKI build) ---------- */
   function build(r, side, amt, minOut, me) {
     const a = r.token, dl = Math.floor(Date.now() / 1000) + 90;
+    if (r.route === 'openfour') return side === 'buy' ? { to: OF.R, value: amt, data: E.call(OFSIG, [r.paths.buy, ZERO, amt, minOut, BigInt(dl)]), gk: 'of_buy' }
+      : { to: OF.R, value: 0n, data: E.call(OFSIG, [r.paths.sell, ZERO, amt, minOut, BigInt(dl)]), gk: 'of_sell', spender: OF.R, amt };
     if (side === 'buy') {
       if (r.route === 'four') return { to: C.TM2, value: amt, data: E.call('buyTokenAMAP(address,uint256,uint256)', [a, amt, minOut]), gk: 'four_buy' };
       if (r.route === 'flap') return { to: C.FLAP, value: amt, data: E.call('swapExactInput((address,address,uint256,uint256,bytes))', [[ZERO, a, amt, minOut, '0x']]), gk: 'flap_buy' };
@@ -195,7 +248,7 @@ const BSC = (() => {
   /* 3.29.31 (owner 1126 "очень долго покупает": "sent in 1296 ms"): the node reads of a trade ran one after another (quote, balance, nonce;
      ~150 ms each, 350-900 ms on a cold connection). Now gas price, balance, allowance and nonce are asked at once with the quote, and the
      relays' connections are kept warm while a BNB coin is open (warm, called by position) */
-  const spenderOf = r => r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' || r.route === 'pancake_v2q' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null;
+  const spenderOf = r => r.route === 'openfour' ? OF.R : r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' || r.route === 'pancake_v2q' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null;
   let warmT = 0;
   /* 3.29.33 (owner 1126 "бнб покупки и продажи очень медленные"): the quote is asked of TWO nodes (security, 3.26.1) and the panel's
      polling kept only one of them warm: the other paid a new connection (350-900 ms) on every click. Every read node is kept warm too. */
@@ -204,6 +257,7 @@ const BSC = (() => {
     for (const u of READ) fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' }).catch(() => {}); }
   async function trade(o, key, me) {
     const T0 = Date.now(), r = await route(o.token); if (!ROUTES.includes(r.route)) throw new Error(r.why || 'no BNB market for this coin');
+    r.me = me;
     const slip = Math.max(0.1, Math.min(100, +o.slip || 15)) / 100, buy = o.side === 'buy', live = o.live !== false, sp = buy ? null : spenderOf(r);
     const gpP = gasPrice(+o.gwei || 0), haveP = buy ? bnb(me) : null, alP = sp && live ? allowance(r.token, me, sp) : null, nP = live ? nonceOf(me) : null;
     for (const p of [gpP, haveP, alP, nP]) if (p) p.catch(() => {});
@@ -295,7 +349,7 @@ const BSC = (() => {
     const sr = await waitRc(s.hash); return Object.assign(res, { hash: s.hash, st: sr.st, ok: sr.st === 'confirmed' });
   }
   async function preApprove(r, key, me, gp) {
-    const spender = r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'pancake_v2q' ? C.V2R : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null; if (!spender) return;
+    const spender = r.route === 'openfour' ? OF.R : r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'pancake_v2q' ? C.V2R : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null; if (!spender) return;
     await new Promise(s => setTimeout(s, 4000));
     if ((await allowance(r.token, me, spender)) > MAXU / 2n) return;
     const n = await nonceOf(me);
@@ -305,9 +359,10 @@ const BSC = (() => {
 
   /* ---------- the position: tokens held, their BNB value now (a small sell quote scaled up: the price, not the price impact), market cap ---------- */
   async function position(token, me) {
-    warm(); const r = await route(token), raw = await balanceOf(r.token, me);
+    warm(); const r = await route(token), raw = await balanceOf(r.token, me); r.me = me;
     let px = 0;   /* BNB per whole token */
     try {
+      if (r.route === 'openfour') { const probe = 10n ** 15n, got = await ofQuote(r, 'buy', probe, me); if (got > 0n) px = 0.001 / (Number(got) / 10 ** r.dec); }
       if (r.route === 'four' || r.route === 'flap') px = r.price || 0;
       if (!px && ROUTES.includes(r.route)) { const unit = 10n ** BigInt(r.dec), probe = raw > 0n ? raw / 50n || raw : unit; const out = await quote(r, 'sell', r.route === 'four' || r.route === 'four_x' ? probe / 10n ** 9n * 10n ** 9n || 10n ** 9n : probe); px = Number(out) / 1e18 / (Number(probe) / 10 ** r.dec); }
     } catch (_) {}
@@ -315,6 +370,6 @@ const BSC = (() => {
     return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell, ofPaths, ofQuote, OF };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;
