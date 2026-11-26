@@ -194,6 +194,10 @@ const SOLX = (() => {
     if (!m) throw new Error('no token found for this address');
     if (MC.size > 2000) MC.clear(); MC.set(a, m); return m;
   }
+  /* 3.29.28 (owner 1126 "P3 does not buy at all": three 1 SOL buys failed on chain, pump.fun error 6020 BuyZeroAmount): a 100 % slippage
+     made the least-tokens-out exactly 0 and pump.fun refuses a buy that accepts 0 tokens. Slippage is used up to 99 % (the least out =
+     1 % of the quote: still any price in practice); the panel keeps showing your 100 %. */
+  const sbps = o => Math.min(9900, Math.round((+o.slip || 20) * 100));
   async function quote(inp, out, amount, slipBps, maxAcc) {
     const u = '/swap/v1/quote?inputMint=' + inp + '&outputMint=' + out + '&amount=' + amount + '&slippageBps=' + slipBps + '&restrictIntermediateTokens=true&maxAccounts=' + (maxAcc || 56);   /* room for our tip + priority fee in one transaction */
     const r = await JF(u); const j = await r.json().catch(() => null);
@@ -332,7 +336,7 @@ const SOLX = (() => {
     throw last || new Error('no route');
   }
   async function jupMake(side, m, x, o, pub, url, soft, qm) {   /* x = lamports in (buy) or tokens in (sell) -> {q, msg | raw, tip, t}; qm: the coin's quote token */
-    const slipBps = Math.round((+o.slip || 20) * 100);
+    const slipBps = sbps(o);
     if (qm && qm !== WSOL && NOQ.get(m) > Date.now() - 60000) return viaQuote(side, m, x, slipBps, qm, o, pub, url, soft);   /* known: no direct route */
     /* a brand-new coin (seen 1116: a pump.fun curve quoted in another token) is quoted by Jupiter a few seconds before its swap builder
        knows the coin's token program ("Missing token program for <mint>"): a trade asks again for up to ~4 s instead of failing */
@@ -413,7 +417,7 @@ const SOLX = (() => {
     return r;
   }
   async function trade0(o, seed, pub, url) {
-    const t0 = Date.now(), jw0 = JW.ms, lap = {}, slip = +o.slip || 20, tip = Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)), prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
+    const t0 = Date.now(), jw0 = JW.ms, lap = {}, slip = Math.min(99, +o.slip || 20), tip = Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)), prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
     if (!(slip >= 0.1 && slip <= 100)) throw new Error('slippage must be 0.1-100 %');
     const m = await mintOf(o.a, url, o.isMint);
     const hov = [...PREP.keys()].some(q => q.startsWith(pub + '|' + m + '|' + (o.side === 'sell' ? 'sell' : 'buy') + '|'));   /* 3.12.2: the button was hovered */
@@ -500,7 +504,7 @@ const SOLX = (() => {
   const qcOk = st => !!(st && st.curve && !st.curve.complete && !st.curve.cashback && !st.curve.mayhem && st.curve.quote && st.curve.quote !== WSOL);
   const qcKnown = (st, m) => qcOk(st) && QCN.get(m) > Date.now() - 600000;
   async function qcTrade(o, st, x, seed, pub, url, t0) {
-    const c = st.curve, qm = c.quote, slipBps = Math.round((+o.slip || 20) * 100), slip = BigInt(slipBps), lap = o._lap || {};
+    const c = st.curve, qm = c.quote, slipBps = sbps(o), slip = BigInt(slipBps), lap = o._lap || {};
     const [conf, [mi], rate] = await Promise.all([pumpConf(url), accs([qm], url), quoteRate(qm).catch(() => null)]);
     if (!mi || !TOKEN_PROGS.includes(mi.owner)) throw new Error('quote coin not found');
     const qp = mi.owner, fee = feeOf(conf, c);
@@ -1022,7 +1026,7 @@ const SOLX = (() => {
   function warmSender() { if (Date.now() - warmT < 20000) return; warmT = Date.now(); pickSenders().catch(() => {}); for (const u of [SENDER, ...SENDERS_NEAR]) fetch(u.replace('/fast', '/ping'), { mode: 'no-cors' }).catch(() => {}); }   /* keep the TLS connection open */
   /* o: {side, sol | pct, slip, tip, prio}; st = pumpState; returns {msg, out (tokens or lamports), impact} without signing */
   async function pumpBuild(o, st, pub, url) {
-    const c = st.curve, conf = await pumpConf(url), fee = feeOf(conf, c), slip = BigInt(Math.round((+o.slip || 20) * 100));
+    const c = st.curve, conf = await pumpConf(url), fee = feeOf(conf, c), slip = BigInt(sbps(o));
     let tip = Math.round(Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)) * 1e9);
     let prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
     const [abc, qbc, qus, uva, ea, bh] = await Promise.all([ata(st.bc, st.prog, st.mint), ata(st.bc, TOKEN, WSOL), ata(pub, TOKEN, WSOL),
@@ -1292,7 +1296,7 @@ const SOLX = (() => {
     AG.v = { pfr }; AG.t = Date.now(); return AG.v;
   }
   async function poolBuild(o, st, P, pub, url) {
-    const conf = await ammConf(url), fee = poolFee(conf, P, st.supply), slip = BigInt(Math.round((+o.slip || 20) * 100));
+    const conf = await ammConf(url), fee = poolFee(conf, P, st.supply), slip = BigInt(sbps(o));
     let tip = Math.round(Math.min(TIP_MAX, Math.max(0, +o.tip >= 0 ? +o.tip : TIP_DEF)) * 1e9);
     let prio = Math.min(PRIO_MAX, Math.max(0, +o.prio >= 0 ? +o.prio : PRIO_DEF));
     const [wa, uva, ea, fc, bb, bh] = await Promise.all([ata(pub, TOKEN, WSOL), pda([enc('user_volume_accumulator'), b58d(pub)], AMM), pda([enc('__event_authority')], AMM),
