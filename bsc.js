@@ -61,8 +61,21 @@ const BSC = (() => {
       P.push([Number(N(W(so))), A(W(so + 1)), A(W(so + 2)), A(W(so + 3)), Number(N(W(so + 4))), Number(BigInt.asIntN(256, N(W(so + 5)))), A(W(so + 6)), '0x' + h.slice((bo + 1) * 64, (bo + 1) * 64 + bl * 2), A(W(so + 8)), '0x' + W(so + 9)]); }
     return P;
   }
-  const ofOk = (P, a, side) => P.length >= 1 && P.length <= 5 && (side === 'buy' ? low(P[0][1]) === low(C.WBNB) && low(P[P.length - 1][2]) === a && P[P.length - 1][0] === 9 && low(P[P.length - 1][3]) === OF.MGR
-    : low(P[0][1]) === a && P[0][0] === 9 && low(P[0][3]) === OF.MGR && low(P[P.length - 1][2]) === low(C.WBNB));
+  /* 3.29.38 (owner 1126, What If Boy 0xa8b9..7777: a Flap coin on its curve quoted in FXIon, "not yet"): the same router trades it along
+     BNB -> FXIon (PancakeSwap V3) -> Flap curve (step kind 6, pool = the coin). Steps allowed: kind 1 = a PancakeSwap V3 pool (its factory
+     is checked on chain), kind 6 = the coin's own Flap curve, kind 9 = OpenFour's manager. A path someone else used is taken only then. */
+  const ofOk = (P, a, side) => P.length >= 1 && P.length <= 5 && P.every(s => [1, 6, 9].includes(s[0])) && (side === 'buy'
+    ? low(P[0][1]) === low(C.WBNB) && low(P[P.length - 1][2]) === a && [6, 9].includes(P[P.length - 1][0])
+    : low(P[0][1]) === a && [6, 9].includes(P[0][0]) && low(P[P.length - 1][2]) === low(C.WBNB));
+  const V3OK = new Map();
+  async function ofPools(P, a) {   /* every step's pool is what its kind says */
+    for (const s of P) {
+      if (s[0] === 9 && low(s[3]) !== OF.MGR) return false;
+      if (s[0] === 6 && low(s[3]) !== a) return false;
+      if (s[0] === 1) { const p = low(s[3]); if (!V3OK.has(p)) { const f = await rpc('eth_call', [{ to: p, data: '0xc45a0155' }, 'latest']).catch(() => ''); V3OK.set(p, String(f).length >= 66 && low('0x' + String(f).slice(26, 66)) === low(C.V3F)); } if (!V3OK.get(p)) return false; }
+    }
+    return true;
+  }
   async function ofPaths(a) {
     const c = OFP.get(a); if (c && Date.now() - c.t < 600000) return c;
     const T = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', U = [READ[0]], hx = v => '0x' + v.toString(16);
@@ -73,7 +86,7 @@ const BSC = (() => {
         const x = await rpc('eth_getTransactionByHash', [l.transactionHash], U).catch(() => null); n++;
         if (!x || ![OF.R, OF.R2].includes(low(x.to)) || !/^0x(4d819a2a|0b3f5cf9)/.test(x.input)) continue;
         let P; try { P = ofDecode(x.input); } catch (_) { continue; }
-        if (!buy && ofOk(P, a, 'buy')) buy = P; else if (!sell && ofOk(P, a, 'sell')) sell = P; }
+        if (!buy && ofOk(P, a, 'buy') && await ofPools(P, a)) buy = P; else if (!sell && ofOk(P, a, 'sell') && await ofPools(P, a)) sell = P; }
     }
     if (!buy && !sell) return null;
     const rev = (P, s) => P.slice().reverse().map(st => { const q = st.slice(); [q[1], q[2]] = [st[2], st[1]]; if (q[0] === 9) q[7] = OFHD(s); return q; });
@@ -117,7 +130,9 @@ const BSC = (() => {
     const flap = words(R[1]);
     if (flap.length >= 11 && wAddr(flap[9]) !== ZERO && !coinQuote) coinQuote = wAddr(flap[9]);
     if (!out && flap.length >= 11 && (flap[0] === 1n || flap[0] === 2n || flap[0] === 3n)) {
-      out = wAddr(flap[9]) === ZERO ? { route: 'flap', venue: 'Flap', price: Number(flap[3]) / 1e18, progress: flap[8] ? Number(flap[2]) / Number(flap[8]) : 0 } : { route: 'unsupported', why: 'Flap coin still on its curve, quoted in another token: not yet' };
+      if (wAddr(flap[9]) === ZERO) out = { route: 'flap', venue: 'Flap', price: Number(flap[3]) / 1e18, progress: flap[8] ? Number(flap[2]) / Number(flap[8]) : 0 };
+      else { const p = await ofPaths(a).catch(() => null);   /* 3.29.38: quoted in another token: through the swap router's path */
+        out = p ? { route: 'openfour', venue: 'Flap', paths: p, progress: flap[8] ? Number(flap[2]) / Number(flap[8]) : 0 } : { route: 'unsupported', why: 'Flap coin on its curve, quoted in another token, with no trades through the swap router yet' }; }
     }
     if (!out) {   /* PancakeSwap: the deeper of the V2 pair and the V3 pools, by the WBNB they hold */
       const pools = []; const pair = R[2] && wAddr(words(R[2])[0]);
@@ -144,7 +159,7 @@ const BSC = (() => {
         }
       }
     }
-    if (!out) { const p = await ofPaths(a).catch(() => null); if (p) out = { route: 'openfour', venue: 'OpenFour', paths: p }; }   /* 3.29.35 */
+    if (!out) { const p = await ofPaths(a).catch(() => null); if (p) out = { route: 'openfour', venue: p.buy.some(s => s[0] === 6) ? 'Flap' : 'OpenFour', paths: p }; }   /* 3.29.35 */
     if (!out) out = { route: 'none', why: 'no BNB market found for this coin' };
     let sym = ''; try { const w = String(R[9] || ''); if (w.length > 130) { const n = Number(BigInt('0x' + w.slice(66, 130))); sym = new TextDecoder().decode(E.hexToBytes('0x' + w.slice(130, 130 + n * 2))); } } catch (_) {}
     Object.assign(out, { t: Date.now(), token: a, dec, supply, sym }); RC.set(a, out); return out;
