@@ -1734,6 +1734,44 @@ const SOLX = (() => {
     return sendWait(b64(cat(Uint8Array.of(1), sg, msg)), url);
   }
 
+  /* ---- 3.29.30 Bridge (owner 1126: "SOL from Solana to BNB"): SOL from one of your Solana wallets -> BNB on BNB Chain through Relay
+     (api.relay.link, the provider of HAKI's own Bridge; CORS open, no key, no new permission). Its quote is ONE instruction of Relay's
+     depository program on Solana: your SOL goes into its vault and Relay's solver pays the BNB on BNB Chain within seconds. The recipient
+     is tied to the request off-chain, so the quote must name your recipient, BNB on chain 56 and your wallet as the sender, and nothing
+     is signed unless the instruction is exactly that deposit: Relay's program, config and vault, your wallet the only signer, your amount. */
+  const RELAY = 'https://api.relay.link', RDEP = '99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2', RCFG = 'Dodg2HifwU8rmaVVyMyUZDGTRbqAJTyVYxXPwcbNpBKc',
+    RVAULT = '7uTT8Xi5RWXzy7h9XL244GRgEycDYDhLjr3ZyNdXi8pZ', RDISC = '0d9e0ddf5fd51c06', BNB0 = '0x0000000000000000000000000000000000000000';
+  const unhex = s => Uint8Array.from(String(s).match(/../g) || [], x => parseInt(x, 16)), tohex = b => [...b].map(v => v.toString(16).padStart(2, '0')).join('');
+  async function bridgeQuote(pub, to, lamports) {
+    to = String(to || '').trim(); if (!/^0x[0-9a-fA-F]{40}$/.test(to)) throw new Error('a BNB Chain address starts with 0x and has 40 more characters');
+    if (!(lamports >= 1e6)) throw new Error('at least 0.001 SOL');
+    const r = await fetch(RELAY + '/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: pub, originChainId: 792703809,
+      destinationChainId: 56, originCurrency: SYS, destinationCurrency: BNB0, recipient: to, tradeType: 'EXACT_INPUT', amount: String(lamports) }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !Array.isArray(j.steps)) throw new Error('Relay: ' + String((j && (j.message || j.error)) || ('HTTP ' + r.status)).slice(0, 160));
+    const d = j.details || {}, out = d.currencyOut || {}, cur = out.currency || {};
+    if (String(d.recipient || '').toLowerCase() !== to.toLowerCase() || d.sender !== pub || +cur.chainId !== 56 || String(cur.address || '').toLowerCase() !== BNB0)
+      throw new Error('Relay answered for another recipient or coin: not used');
+    const st = j.steps.filter(s => s.kind === 'transaction');
+    if (j.steps.length !== 1 || st.length !== 1 || (st[0].items || []).length !== 1) throw new Error('Relay offered a route of ' + j.steps.length + ' steps: not used');
+    const L = (((st[0].items[0] || {}).data || {}).instructions || []).filter(x => x.programId !== CBP);
+    if (L.length !== 1) throw new Error('the Relay route has ' + L.length + ' instructions: not signed');
+    const x = L[0], k = x.keys || [], data = unhex(x.data || '');
+    const ok = x.programId === RDEP && k.length === 5 && k[0].pubkey === RCFG && !k[0].isSigner && k[1].pubkey === pub && k[1].isSigner && k[2].pubkey === pub && !k[2].isSigner
+      && k[3].pubkey === RVAULT && !k[3].isSigner && k[4].pubkey === SYS && !k[4].isSigner && data.length === 48 && tohex(data.slice(0, 8)) === RDISC && u64(data, 8) === BigInt(lamports);
+    if (!ok) throw new Error('the Relay route is not the plain SOL deposit HAKI knows: not signed');
+    const fee = (+((j.fees || {}).relayer || {}).amount || 0) / 1e9;
+    return { id: st[0].requestId, ix: { prog: RDEP, keys: k.map(y => [y.pubkey, !!y.isSigner, !!y.isWritable]), data }, sol: lamports / 1e9, to,
+      bnb: +out.amountFormatted || 0, usd: +out.amountUsd || 0, impact: +((d.totalImpact || {}).percent) || 0, secs: +d.timeEstimate || 0, fee };
+  }
+  async function bridgeMsg(pub, q, url) { return compile(pub, [cuLimit(40000), cuPrice(200000), q.ix], await blockhash.refresh(url)); }
+  async function bridgeSend(seed, pub, q, url) { const msg = await bridgeMsg(pub, q, url), sg = await sign(seed, msg); return sendWait(b64(cat(Uint8Array.of(1), sg, msg)), url); }
+  async function bridgeStatus(id) {
+    const r = await fetch(RELAY + '/intents/status/v3?requestId=' + encodeURIComponent(id)), j = await r.json().catch(() => null);
+    if (!r.ok || !j) throw new Error('Relay status: HTTP ' + r.status);
+    return { st: String(j.status || 'unknown'), out: (j.txHashes || [])[0] || null };
+  }
+
   /* Auto sell decision: A = rules, f = what already fired on this position (+ peak multiple), x = price now / average entry,
      left = SOL put in minus SOL taken out, value = what the position is worth now. -> [kind, sell %, label] | ['safe-done'] | null.
      Stop loss first, then trailing, then Safe 2x, then take profit. m = { now, entry } market cap in $ (null: unknown): a rule set by
@@ -1748,7 +1786,7 @@ const SOLX = (() => {
     if (A.tp.on && !f.tp && (byMc(A.tp) ? m && m.now >= A.tp.mc && m.entry < A.tp.mc : x >= 1 + A.tp.at / 100)) return ['tp', A.tp.pct, byMc(A.tp) ? 'Take profit at MC $' + kmc(A.tp.mc) : 'Take profit +' + A.tp.at + '%'];
     return null;
   }
-  return { paySol, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, mevSet: L => { MEV.bad = new Set([MEV.seed, ...(L || [])]); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
+  return { paySol, bridgeQuote, bridgeMsg, bridgeSend, bridgeStatus, RG, MEV, mevSlot, mevLeaders, mevBadNow, sandwichOf, mevHeld: g => MEVH.get(g) || null, mevBad: l => { if (l) MEV.bad.add(l); }, mevSet: L => { MEV.bad = new Set([MEV.seed, ...(L || [])]); }, multiTrade, pickSenders, cashbackOf, claimCashback, creatorFees, claimCreator, ogFind, coinMeta, launchTx, launchMany, launchFresh, sweepTo, freshNeed, claimFresh, twoStep, feeRefresh, poolFlags, poolBuild, poolState, warmSender, autoRule, emptyAccounts, closeEmpty, moveSol, failKind, compileV0, jupIx, quoteRate, ammConf, poolState, poolSell, poolFee, valueNow, AMM, i128, curveOf, u64, ST, pda, ata, onCurve, accs, pumpState, pumpConf, pumpBuild, feeOf, buyOut, sellOut, holdValue, whyFailed, sendFast, blockhash, compile, PUMP, HTIP,
     CONF, prep, txDeltas, solUsd, pnlOf, WSOL, TIP_MAX, TIP_DEF, b58e, b58d, isAddr, parseTx, pubOf, sign, signTx, readSecret, seal, unseal, sellAmount, rpc, balance, tokBal, mintOf, quote, build, sendAll, trade, txStatus, position, b64, unb64, llState, llOf, cpmmOf, cpmmState };
 })();
 if (typeof module !== 'undefined') module.exports = SOLX;

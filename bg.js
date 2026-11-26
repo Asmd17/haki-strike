@@ -374,6 +374,16 @@ async function posAll(c, a, isMint, pubs) {
 }
 const rpcUrl = c => (c.rpc && /^https:\/\//.test(c.rpc)) ? c.rpc : undefined;
 const busy = new Set(), done = new Map();
+/* 3.29.30 Bridge history ('bridges', the last 20) and its watcher: Relay's status every 2 s for up to 5 min after the deposit */
+async function bridgeSet(e) { return MUT(async () => { const { bridges = [] } = await chrome.storage.local.get({ bridges: [] }); const i = bridges.findIndex(x => x.id === e.id);
+  if (i >= 0) bridges[i] = Object.assign(bridges[i], e); else bridges.push(e); await chrome.storage.local.set({ bridges: bridges.slice(-20) }); }); }
+const BRW = new Set();
+async function bridgeWatch(id) {
+  if (BRW.has(id)) return; BRW.add(id);
+  try { for (let i = 0; i < 150; i++) { await new Promise(z => setTimeout(z, 2000)); const s = await SOLX.bridgeStatus(id).catch(() => null); if (!s) continue;
+    await bridgeSet({ id, st: s.st, out: s.out }); if (/^(success|failure|refund|refunded)$/.test(s.st)) return; } }
+  finally { BRW.delete(id); }
+}
 /* 3.29.26 (owner 1125, "отстает": Flor showed Sold 1.447 while the chain and Axiom had the 7th sell, Copyinu Sold 0.519 = PnL 0.2 SOL low):
    a sell's tokens left Holding the moment it landed, but its SOL entered Sold only once the ledger could read the transaction (seconds,
    behind the sandwich checks' history reads; bookSoon gave up after ~25 tries). A trade of this extension that landed counts at once now:
@@ -1056,6 +1066,22 @@ async function handle(m) {
     const r = fresh ? await SOLX.launchFresh(mint, n, SOLX.unb64(K[w.pub]), w.pub, url, o, (F, meta) => lwAdd(F, meta)) : await SOLX.launchMany(mint, n, SOLX.unb64(K[w.pub]), w.pub, url, o);
     return Object.assign(r, { wallet: w.label, cost: +(n * (fresh ? 0.0063 : per)).toFixed(4) });   /* fresh: ~0.0063 SOL a coin stays (rent + fees), the rest comes back */
   }
+  if (m.op === 'bridgeQuote' || m.op === 'bridge') {   /* 3.29.30 Bridge: SOL from one of your Solana wallets -> BNB on BNB Chain (Relay, core.js) */
+    const W = await walletsAll(), f = W.find(w => w.pub === a.from); if (!f) throw new Error('choose one of your Solana wallets');
+    const have = await SOLX.balance(f.pub, rpcUrl(c)), KEEP = 1000000;   /* 0.001 SOL stays on the wallet: the network fee and its rent */
+    let lam = a.max ? have - KEEP : Math.round(+String(a.sol || '').replace(',', '.') * 1e9);
+    if (!(lam > 0)) throw new Error(a.max ? f.label + ' has ' + (have / 1e9).toFixed(4) + ' SOL' : 'type how much SOL');
+    if (lam > have - KEEP) throw new Error(f.label + ' has ' + (have / 1e9).toFixed(4) + ' SOL; 0.001 stays for the fee');
+    const q = await SOLX.bridgeQuote(f.pub, a.to, lam);
+    if (m.op === 'bridgeQuote') return { sol: q.sol, bnb: q.bnb, usd: q.usd, impact: q.impact, secs: q.secs, fee: q.fee };
+    if (q.impact < -5) throw new Error('Relay would keep ' + (-q.impact).toFixed(1) + ' % of it (fees on a small amount): not sent');
+    const K = await seedsAll(); if (!K[f.pub]) throw new Error(f.label + ' is locked');
+    const sig = await SOLX.bridgeSend(SOLX.unb64(K[f.pub]), f.pub, q, rpcUrl(c));
+    const e = { t: Date.now(), id: q.id, sig, sol: q.sol, bnb: q.bnb, to: q.to, from: f.label, st: 'sent', out: null };
+    await bridgeSet(e); bridgeWatch(e.id).catch(() => {});
+    return Object.assign({ ok: true }, e);
+  }
+  if (m.op === 'bridgeList') { const { bridges = [] } = await chrome.storage.local.get({ bridges: [] }); for (const e of bridges) if (/^(sent|waiting|pending|submitted|delayed)$/.test(e.st) && Date.now() - e.t < 600000) bridgeWatch(e.id).catch(() => {}); return { list: bridges.slice(-4).reverse() }; }
   if (m.op === 'move') {   /* SOL from one of your wallets to another of yours (never anywhere else) */
     const W = await walletsAll(), K = await seedsAll(), f = W.find(w => w.pub === a.from), t = W.find(w => w.pub === a.to);
     if (!f || !t || f === t) throw new Error('choose two different wallets of yours');

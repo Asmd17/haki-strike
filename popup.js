@@ -78,7 +78,7 @@ async function paint() {   /* every wallet: name, address, SOL; one password unl
   $('wNew').hidden = !!L.length && !adding;
   $('iP2l').hidden = !!L.length; $('iP1l').firstChild.textContent = L.length ? 'Your HAKI Strike password (the same for every wallet)' : 'New password';
   $('iPw').style.gridTemplateColumns = L.length ? '1fr' : '';
-  paintMove(L); paintSav();
+  paintMove(L); paintSav(); paintBridge(L).catch(() => {});
   const on = L.filter(w => w.sel && w.open && w.sol != null);
   $('bal').textContent = on.length ? on.reduce((s, w) => s + w.sol, 0).toFixed(4) + ' SOL' + (on.length > 1 ? ' · ' + on.length + ' wallets' : '') : '';
   $('bal2').textContent = on.length ? on.reduce((s, w) => s + w.sol, 0).toFixed(3) + ' SOL' : '';
@@ -185,6 +185,43 @@ function paintMove(L) {
   if (f) $('mvFrom').value = f; if (t) $('mvTo').value = t; else if ($('mvTo').options.length > 1) $('mvTo').selectedIndex = 1;
 }
 let mvMax = false;
+/* 3.29.30 Bridge: SOL from one of your Solana wallets -> BNB on BNB Chain (Relay). To = your BSC wallet here unless you type another address */
+let brMax = false, brT = 0, brN = 0, brBsc = '';
+async function paintBridge(L) {
+  const open = L.filter(w => w.open); $('brBox').hidden = !open.length;
+  const f = $('brFrom').value; $('brFrom').innerHTML = open.map(w => '<option value="' + esc(w.pub) + '">' + esc(w.label) + ' · ' + (w.sol == null ? '–' : sol4(w.sol)) + ' SOL</option>').join('');
+  if (f && open.some(w => w.pub === f)) $('brFrom').value = f; else { const s = open.find(w => w.sel); if (s) $('brFrom').value = s.pub; }
+  const b = await ask('bscWallet').catch(() => null); brBsc = b && b.addr ? b.addr : '';
+  if (!$('brTo').value && brBsc) $('brTo').value = brBsc;
+  paintBridgeList().catch(() => {});
+}
+const brArg = () => ({ from: $('brFrom').value, to: $('brTo').value.trim(), sol: $('brAmt').value, max: brMax });
+function brQuote() {
+  clearTimeout(brT); const a = brArg(); if (!a.max && !(+String(a.sol).replace(',', '.') > 0)) { $('brQ').textContent = ''; return; }
+  $('brQ').textContent = 'Asking Relay…'; const n = ++brN;
+  brT = setTimeout(async () => { const r = await ask('bridgeQuote', a).catch(() => null); if (n !== brN) return;
+    if (!r || r.err) { $('brQ').textContent = (r && r.err) || 'no answer'; return; }
+    $('brQ').textContent = 'You get ≈ ' + r.bnb.toFixed(5) + ' BNB' + (r.usd ? ' ($' + r.usd.toFixed(2) + ')' : '') + ' for ' + sol4(r.sol) + ' SOL · Relay keeps ' + Math.abs(r.impact).toFixed(1) + ' % · ~' + Math.max(1, r.secs) + ' s'
+      + (brBsc && a.to.toLowerCase() === brBsc.toLowerCase() ? ' · to your BSC wallet' : ''); }, 500);
+}
+async function paintBridgeList() {
+  const r = await ask('bridgeList').catch(() => null); const L = (r && r.list) || [];
+  const word = s => s === 'success' ? 'arrived' : /^(failure|refund|refunded)$/.test(s) ? s + ' (Relay sends the SOL back)' : 'on the way';
+  $('brL').innerHTML = L.map(e => '<div>' + new Date(e.t).toLocaleTimeString() + ' · ' + sol4(e.sol) + ' SOL → ' + (+e.bnb).toFixed(5) + ' BNB · <b>' + esc(word(e.st)) + '</b>'
+    + (e.out ? ' · <a href="https://bscscan.com/tx/' + esc(e.out) + '" target="_blank" rel="noopener" style="color:inherit">BscScan</a>' : '') + ' · <a href="https://solscan.io/tx/' + esc(e.sig) + '" target="_blank" rel="noopener" style="color:inherit">Solscan</a></div>').join('');
+  if (L.some(e => word(e.st) === 'on the way' && Date.now() - e.t < 600000)) setTimeout(() => paintBridgeList().catch(() => {}), 2000);
+}
+$('brMax').onclick = () => { brMax = true; $('brAmt').value = 'all'; brQuote(); };
+$('brAmt').oninput = () => { brMax = false; brQuote(); };
+$('brTo').oninput = brQuote; $('brFrom').onchange = brQuote;
+$('brGo').onclick = async () => {
+  const a = brArg(); if (!/^0x[0-9a-fA-F]{40}$/.test(a.to)) { say('tst', 'Type a BNB Chain address (0x…)', 'bad'); return; }
+  $('brGo').disabled = true; say('tst', 'Bridging…');
+  const r = await ask('bridge', a); $('brGo').disabled = false;
+  if (!r || r.err) { say('tst', (r && r.err) || 'no answer', 'bad'); return; }
+  say('tst', sol4(r.sol) + ' SOL sent from ' + r.from + ' · ≈ ' + (+r.bnb).toFixed(5) + ' BNB arrives on ' + r.to.slice(0, 6) + '…' + r.to.slice(-4) + ' in seconds', 'ok');
+  $('brAmt').value = ''; brMax = false; $('brQ').textContent = ''; paint(); paintBridgeList().catch(() => {});
+};
 $('mvMax').onclick = () => { mvMax = true; $('mvAmt').value = 'all'; };
 $('mvAmt').oninput = () => { mvMax = false; };
 $('mvGo').onclick = async () => {
