@@ -968,10 +968,21 @@ async function handle(m) {
     let key; try { key = await SOLX.unseal(w.box, String(a.pass || ''), bscChk(w.box)); } catch (_) { throw new Error('wrong password'); }
     return { addr: w.addr, key: EVM.bytesToHex(key) };
   }
-  if (m.op === 'bscDustList') {   /* 3.29.34 Sell dust: the BNB wallet's coins (Moralis, your free key) */
+  if (m.op === 'bscDustList') {   /* 3.29.34 Sell dust: the BNB wallet's coins. 3.29.36 (owner 1126: "no API keys, one button like on SOL"): from
+       your own pump.fun portfolio (its user-portfolio list, read with your pump.fun login the way callouts are; BNB Chain = chainId 56); the
+       Moralis key is only a fallback */
     const w = (await bwalletsAll())[0]; if (!w) throw new Error('add your BSC wallet first');
-    const { moralisKey = '' } = await chrome.storage.local.get({ moralisKey: '' }); if (!String(moralisKey).trim()) throw new Error('paste your free Moralis API key first');
-    return { addr: w.addr, list: await BSC.holdings(w.addr, String(moralisKey).trim()) };
+    const sol = ((await walletsAll())[0] || {}).pub, list = [], seen = new Set(); let pfErr = '';
+    if (sol) { try { for (let p = 1; p <= 12; p++) {
+      const r = await fetch(PF + '/user-portfolio/' + sol + '?filter=open&page=' + p + '&pageSize=100&sortBy=POSITION_SIZE', { credentials: 'include' }); if (!r.ok) { pfErr = 'pump.fun answered ' + r.status; break; }
+      const L = ((await r.json()) || {}).positions || [];
+      for (const x of L) { const t = String(x.coinMint || '').toLowerCase(); if (+x.chainId !== 56 || !(+x.amountHeld > 0) || !/^0x[0-9a-f]{40}$/.test(t) || seen.has(t)) continue; seen.add(t);
+        list.push({ token: t, sym: String(((x.coin || {}).symbol) || '').slice(0, 16), dec: 18, raw: '0', usd: 0, spam: !!x.potentialSpam && !x.userMarkedNonSpam }); }
+      if (L.length < 100) break; } } catch (e) { pfErr = String((e && e.message) || e).slice(0, 80); } }
+    if (list.length) return { addr: w.addr, list, src: 'pump.fun' };
+    const { moralisKey = '' } = await chrome.storage.local.get({ moralisKey: '' });
+    if (String(moralisKey).trim()) return { addr: w.addr, list: await BSC.holdings(w.addr, String(moralisKey).trim()), src: 'Moralis' };
+    throw new Error('log in to pump.fun in this Chrome: the coin list comes from your pump.fun portfolio' + (pfErr ? ' (' + pfErr + ')' : ''));
   }
   if (m.op === 'bscDustOne') {   /* one coin of the dust list -> BNB through ParaSwap (bsc.js dustSell) */
     const { addr, key } = await bscKey();

@@ -267,9 +267,9 @@ html.win .bar{left:216px;padding:12px 40px}
  <section id="dsBox" hidden>
   <div class="sh"><h2>Sell dust</h2><span class="n" style="margin-left:auto;font-size:12px">BNB wallet · every small coin → BNB · ParaSwap</span></div>
   <div class="cd pad">
-   <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end"><label>Moralis API key (free at admin.moralis.com: it lists the wallet's coins)<input id="dsKey" type="password" autocomplete="off" spellcheck="false" placeholder="paste it once"></label><button class="sec" id="dsKeyGo" type="button">Save</button></div>
+   <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end"><label>Moralis API key (optional: only if your pump.fun portfolio can not list the coins)<input id="dsKey" type="password" autocomplete="off" spellcheck="false" placeholder="not needed when you are logged in to pump.fun"></label><button class="sec" id="dsKeyGo" type="button">Save</button></div>
    <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end;margin-top:8px"><label>Sell coins worth under<span class="in"><input id="dsMax" inputmode="decimal" value="0.002"><i>BNB</i></span></label><button class="sec" id="dsFind" type="button">Find dust</button><button class="pri" id="dsGo" type="button" disabled>Sell dust</button></div>
-   <div class="n" id="dsInfo" style="margin-top:8px;font-size:12px" aria-live="polite">Coins worth less than twice their gas and coins with no market are left alone. Keep this page open while it sells.</div>
+   <div class="n" id="dsInfo" style="margin-top:8px;font-size:12px" aria-live="polite">The coin list comes from your pump.fun portfolio (log in to pump.fun in this Chrome). Coins worth less than twice their gas and coins with no market are left alone, nothing is sent for them. Keep this page open while it sells.</div>
    <div id="dsLog" style="margin-top:8px;font-size:12px;display:grid;gap:2px;max-height:220px;overflow:auto"></div>
   </div>
  </section>

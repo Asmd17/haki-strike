@@ -355,7 +355,7 @@ $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 async function paintBsc() {
   const r = await ask('bscWallet');
   $('bExp').hidden = !r || !!r.none; $('dsBox').hidden = !r || !!r.none;
-  chrome.storage.local.get({ moralisKey: '' }).then(o => { $('dsKey').placeholder = o.moralisKey ? 'saved (paste a new one to replace it)' : 'paste it once'; }).catch(() => {});
+  chrome.storage.local.get({ moralisKey: '' }).then(o => { $('dsKey').placeholder = o.moralisKey ? 'saved (paste a new one to replace it)' : 'not needed when you are logged in to pump.fun'; }).catch(() => {});
   if (!r || r.none) { $('bList').innerHTML = ''; $('bList').hidden = true; $('bNew').hidden = false; $('bPl').hidden = false; return; }
   $('bNew').hidden = true; $('bList').hidden = false;
   $('bList').innerHTML = '<div class="wi"><span class="av" aria-hidden="true" style="background:#F0B90B;color:#000">B</span><span class="t"><b>' + esc(r.label || 'BSC wallet') + '</b><i>' + esc(r.addr.slice(0, 6) + '…' + r.addr.slice(-6)) + '</i></span>'
@@ -380,7 +380,7 @@ $('dsFind').onclick = async () => {
   const r = await ask('bscDustList'); $('dsFind').disabled = false;
   if (!r || r.err) { $('dsInfo').textContent = (r && r.err) || 'no answer'; return; }
   DS = r.list; const usd = DS.reduce((s, x) => s + (x.usd || 0), 0), spam = DS.filter(x => x.spam).length;
-  $('dsInfo').textContent = DS.length + ' coins on ' + r.addr.slice(0, 6) + '…' + r.addr.slice(-4) + (usd ? ' · ≈ $' + usd.toFixed(2) + ' by Moralis prices' : '') + (spam ? ' · ' + spam + ' look like airdrop spam' : '') + '. Sell dust tries each one and leaves what is worth more than your limit.';
+  $('dsInfo').textContent = DS.length + ' coins on ' + r.addr.slice(0, 6) + '…' + r.addr.slice(-4) + ' (list: ' + (r.src || '?') + ')' + (usd ? ' · ≈ $' + usd.toFixed(2) + ' by Moralis prices' : '') + (spam ? ' · ' + spam + ' marked as airdrop spam by pump.fun' : '') + '. Sell dust tries each one and leaves what is worth more than your limit.';
   $('dsGo').disabled = !DS.length;
 };
 $('dsGo').onclick = async () => {
