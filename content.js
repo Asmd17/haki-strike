@@ -887,14 +887,14 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (side === 'buy') nBuy--; else selling = false; lock();
     if (r.err) { status(r.err, 'bad'); window.hkSound('fail'); return; }
     if (r.sent === false) { status(r.sim && r.sim.ok ? 'Test mode: would go through, nothing sent' : 'Test mode: would fail: ' + ((r.sim && r.sim.err) || '?'), r.sim && r.sim.ok ? 'ok' : 'bad'); return; }
-    status(label + ' sent in ' + (Date.now() - t0) + ' ms (' + (r.venue || '') + ', ' + r.via + '), landing…');
+    const tSent = Date.now() - t0; status(label + ' sent in ' + tSent + ' ms (' + (r.venue || '') + ', ' + r.via + '), landing…');
     for (const t1 = Date.now(); Date.now() - t1 < 30000;) {   /* 3.29.31: every 0.2 s the first 10 s (a BNB Chain block is 0.45 s), then 0.6 s */
       await new Promise(z => setTimeout(z, Date.now() - t1 < 10000 ? 200 : 600)); const s = await send('bscStatus', { hash: r.hash });
       if (s.st === 'confirmed') {
         const outB = side === 'sell' ? Number(BigInt(r.out || 0)) / 1e18 : 0;
         await bled(a, L => { if (side === 'buy') { L.in += v; L.nb++; } else { L.out += outB; L.ns++; } });
         if (side === 'buy') send('bscBought', { token: a, bnb: v });   /* auto callout */
-        status(label + ' landed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s', 'ok'); window.hkSound(side === 'sell' ? 'sell' : 'buy'); bscPoll(true); refreshBal(); return;
+        status(label + ' landed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s (quote ' + (r.tq != null ? r.tq : '?') + ' ms, sent at ' + tSent + ' ms, block +' + ((Date.now() - t0 - tSent) / 1000).toFixed(1) + ' s)', 'ok'); window.hkSound(side === 'sell' ? 'sell' : 'buy'); bscPoll(true); refreshBal(); return;
       }
       if (s.st === 'failed') { status(label + ' failed on chain', 'bad'); window.hkSound('fail'); return; }
     }

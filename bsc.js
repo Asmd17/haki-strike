@@ -197,10 +197,13 @@ const BSC = (() => {
      relays' connections are kept warm while a BNB coin is open (warm, called by position) */
   const spenderOf = r => r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' || r.route === 'pancake_v2q' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null;
   let warmT = 0;
-  function warm() { if (Date.now() - warmT < 20000) return; warmT = Date.now();
-    for (const u of SEND) fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' }).catch(() => {}); }
+  /* 3.29.33 (owner 1126 "бнб покупки и продажи очень медленные"): the quote is asked of TWO nodes (security, 3.26.1) and the panel's
+     polling kept only one of them warm: the other paid a new connection (350-900 ms) on every click. Every read node is kept warm too. */
+  function warm() { if (Date.now() - warmT < 15000) return; warmT = Date.now();
+    for (const u of SEND) fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' }).catch(() => {});
+    for (const u of READ) fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' }).catch(() => {}); }
   async function trade(o, key, me) {
-    const r = await route(o.token); if (!ROUTES.includes(r.route)) throw new Error(r.why || 'no BNB market for this coin');
+    const T0 = Date.now(), r = await route(o.token); if (!ROUTES.includes(r.route)) throw new Error(r.why || 'no BNB market for this coin');
     const slip = Math.max(0.1, Math.min(100, +o.slip || 15)) / 100, buy = o.side === 'buy', live = o.live !== false, sp = buy ? null : spenderOf(r);
     const gpP = gasPrice(+o.gwei || 0), haveP = buy ? bnb(me) : null, alP = sp && live ? allowance(r.token, me, sp) : null, nP = live ? nonceOf(me) : null;
     for (const p of [gpP, haveP, alP, nP]) if (p) p.catch(() => {});
@@ -218,7 +221,7 @@ const BSC = (() => {
         const sim = await rpc('eth_estimateGas', [{ from: me, to: tx.to, value: '0x' + tx.value.toString(16), data: tx.data }]).then(g => ({ ok: true, gas: Number(BigInt(g)) }), e => ({ ok: false, err: String(e.message).slice(0, 160) }));
         return { sent: false, route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), sim };
       }
-      const out = { route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), dec: r.dec };
+      const out = { route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), dec: r.dec, tq: Date.now() - T0 };   /* 3.29.33: ms to the quote */
       let n = await nP; held = n;
       if (tx.spender && (await alP) < tx.amt) {   /* first sell on this venue: approve, then the sell right behind it */
         out.approve = await signSend({ to: r.token, value: 0n, data: E.call('approve(address,uint256)', [tx.spender, MAXU]), gk: 'approve' }, key, me, n, gp);
