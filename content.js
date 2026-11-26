@@ -713,6 +713,10 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (!BSCM() || PAPER) return; const a = A, p = await send('bscPos', { token: a }); if (a !== A || p.err || PAPER) return;
     if (p.bnb != null) { bal = p.bnb; paintBal(); }
     const L = await bled(a), val = p.value_bnb || 0, has = BigInt(p.raw || '0') > 0n, pnl = L.out + val - L.in;
+    /* 3.29.31: coins held with no trade booked (buys made while the panel never heard 'confirmed'): their buys are read from the chain once */
+    if (has && !L.nb && !L.ns && !BSYNC.has(a) && !nBuy && !selling && Date.now() - bscLastT > 30000) { BSYNC.add(a);
+      send('bscSync', { token: a }).then(async s => { if (!s || s.err || !(s.nb > 0) || Date.now() - bscLastT < 30000) return;
+        await bled(a, X => { if (!X.nb && !X.ns) { X.in = s.in; X.nb = s.nb; } }); if (a === A) bscPoll(true); }); }
     paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null, aslip: p.aslip,
       pnl: L.nb || L.ns ? { bought: L.in, sold: L.out, pnl, pct: L.in > 0 ? pnl / L.in * 100 : null, gas: 0, nb: L.nb, ns: L.ns } : null });
     if (!has && p.route && !['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3'].includes(p.route) && !S.title) status(p.why || 'no BNB market found for this coin', 'bad');
@@ -871,9 +875,10 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
   }
   const simWhy = e => { const t = JSON.stringify(e); return /AccountNotFound|InsufficientFunds/.test(t) ? 'the wallet has no SOL for this trade' : 'simulation failed (' + t.slice(0, 60) + ')'; };
   /* 3.14.1 BSC: the worker's BSC engine (bsc.js), then the receipt; the ledger of this coin for Bought / Sold / PnL */
+  const BSYNC = new Set(); let bscLastT = 0;   /* 3.29.31: coins whose earlier buys were looked up on the chain this session; the last trade's time */
   async function bled(tok, f) { const { bled = {} } = await chrome.storage.local.get({ bled: {} }); const L = Object.assign({ in: 0, out: 0, nb: 0, ns: 0 }, bled[tok]); if (f) { f(L); bled[tok] = L; await chrome.storage.local.set({ bled }); } return L; }
   async function tradeBsc(a, side, v, btn) {
-    if (side === 'buy') nBuy++; else selling = true; lock(); const t0 = Date.now();
+    if (side === 'buy') nBuy++; else selling = true; lock(); const t0 = Date.now(); bscLastT = t0;
     const label = side === 'buy' ? 'Buy ' + v + ' BNB' : 'Sell ' + (+v).toFixed(v % 1 ? 1 : 0) + '%';
     if (btn) { if (!btn._n) btn.classList.add('busy'); btn._n = (btn._n || 0) + 1; }
     status(label + '…');
@@ -883,8 +888,8 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (r.err) { status(r.err, 'bad'); window.hkSound('fail'); return; }
     if (r.sent === false) { status(r.sim && r.sim.ok ? 'Test mode: would go through, nothing sent' : 'Test mode: would fail: ' + ((r.sim && r.sim.err) || '?'), r.sim && r.sim.ok ? 'ok' : 'bad'); return; }
     status(label + ' sent in ' + (Date.now() - t0) + ' ms (' + (r.venue || '') + ', ' + r.via + '), landing…');
-    for (let i = 0; i < 60; i++) {
-      await new Promise(z => setTimeout(z, 500)); const s = await send('bscStatus', { hash: r.hash });
+    for (const t1 = Date.now(); Date.now() - t1 < 30000;) {   /* 3.29.31: every 0.2 s the first 10 s (a BNB Chain block is 0.45 s), then 0.6 s */
+      await new Promise(z => setTimeout(z, Date.now() - t1 < 10000 ? 200 : 600)); const s = await send('bscStatus', { hash: r.hash });
       if (s.st === 'confirmed') {
         const outB = side === 'sell' ? Number(BigInt(r.out || 0)) / 1e18 : 0;
         await bled(a, L => { if (side === 'buy') { L.in += v; L.nb++; } else { L.out += outB; L.ns++; } });

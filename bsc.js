@@ -192,30 +192,57 @@ const BSC = (() => {
   async function bnb(me) { return BigInt(await rpc('eth_getBalance', [me, 'latest'])); }
 
   /* o: {side, token, bnb (buy) | pct (sell), slip %, gwei (0 = the network's), live} -> {hash, via, route, out, min} */
+  /* 3.29.31 (owner 1126 "очень долго покупает": "sent in 1296 ms"): the node reads of a trade ran one after another (quote, balance, nonce;
+     ~150 ms each, 350-900 ms on a cold connection). Now gas price, balance, allowance and nonce are asked at once with the quote, and the
+     relays' connections are kept warm while a BNB coin is open (warm, called by position) */
+  const spenderOf = r => r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' || r.route === 'pancake_v2q' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null;
+  let warmT = 0;
+  function warm() { if (Date.now() - warmT < 20000) return; warmT = Date.now();
+    for (const u of SEND) fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' }).catch(() => {}); }
   async function trade(o, key, me) {
     const r = await route(o.token); if (!ROUTES.includes(r.route)) throw new Error(r.why || 'no BNB market for this coin');
-    const slip = Math.max(0.1, Math.min(100, +o.slip || 15)) / 100;
-    let amt;
-    if (o.side === 'buy') { amt = BigInt(Math.round(+o.bnb * 1e18)); if (!(amt > 0n)) throw new Error('amount must be above 0'); }
-    else { const bal = await balanceOf(r.token, me); const pct = Math.max(0, Math.min(100, +o.pct || 0)); amt = pct >= 100 ? bal : bal * BigInt(Math.round(pct * 100)) / 10000n; if (!(amt > 0n)) throw new Error('you hold none of this token'); }
-    const [est, gp] = await Promise.all([quoteSafe(r, o.side, o.side === 'sell' && (r.route === 'four' || r.route === 'four_x') ? amt / 10n ** 9n * 10n ** 9n : amt), gasPrice(+o.gwei || 0)]);
-    if (!(est > 0n)) throw new Error('no quote for this trade: not sent');   /* HAKI minout_guard: never trade with no minimum */
-    const min = slip >= 1 ? 1n : est * BigInt(Math.round((1 - slip) * 10000)) / 10000n;
-    const tx = build(r, o.side, amt, min > 0n ? min : 1n, me);
-    if (o.side === 'buy') { const have = await bnb(me); const need = amt + gp * BigInt(GAS[tx.gk]); if (have < need) throw new Error('not enough BNB: ' + (Number(have) / 1e18).toFixed(4) + ', this needs about ' + (Number(need) / 1e18).toFixed(4)); }
-    if (o.live === false) {
-      const sim = await rpc('eth_estimateGas', [{ from: me, to: tx.to, value: '0x' + tx.value.toString(16), data: tx.data }]).then(g => ({ ok: true, gas: Number(BigInt(g)) }), e => ({ ok: false, err: String(e.message).slice(0, 160) }));
-      return { sent: false, route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), sim };
-    }
-    const out = { route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), dec: r.dec };
-    if (tx.spender && (await allowance(r.token, me, tx.spender)) < tx.amt) {   /* first sell on this venue: approve, then the sell right behind it */
-      const n0 = await nonceOf(me);
-      try { out.approve = await signSend({ to: r.token, value: 0n, data: E.call('approve(address,uint256)', [tx.spender, MAXU]), gk: 'approve' }, key, me, n0, gp); } catch (e) { nonceBack(me, n0); throw e; }
-    }
-    const n = await nonceOf(me);
-    try { Object.assign(out, await signSend(tx, key, me, n, gp)); } catch (e) { nonceBack(me, n); throw e; }
-    if (o.side === 'buy') preApprove(r, key, me, gp).catch(() => {});   /* so the first sell needs no approval */
-    return out;
+    const slip = Math.max(0.1, Math.min(100, +o.slip || 15)) / 100, buy = o.side === 'buy', live = o.live !== false, sp = buy ? null : spenderOf(r);
+    const gpP = gasPrice(+o.gwei || 0), haveP = buy ? bnb(me) : null, alP = sp && live ? allowance(r.token, me, sp) : null, nP = live ? nonceOf(me) : null;
+    for (const p of [gpP, haveP, alP, nP]) if (p) p.catch(() => {});
+    let held = null, used = false;   /* held: a nonce taken and not sent yet (handed back when the trade stops); used: nP's nonce went out */
+    try {
+      let amt;
+      if (buy) { amt = BigInt(Math.round(+o.bnb * 1e18)); if (!(amt > 0n)) throw new Error('amount must be above 0'); }
+      else { const bal = await balanceOf(r.token, me); const pct = Math.max(0, Math.min(100, +o.pct || 0)); amt = pct >= 100 ? bal : bal * BigInt(Math.round(pct * 100)) / 10000n; if (!(amt > 0n)) throw new Error('you hold none of this token'); }
+      const [est, gp] = await Promise.all([quoteSafe(r, o.side, !buy && (r.route === 'four' || r.route === 'four_x') ? amt / 10n ** 9n * 10n ** 9n : amt), gpP]);
+      if (!(est > 0n)) throw new Error('no quote for this trade: not sent');   /* HAKI minout_guard: never trade with no minimum */
+      const min = slip >= 1 ? 1n : est * BigInt(Math.round((1 - slip) * 10000)) / 10000n;
+      const tx = build(r, o.side, amt, min > 0n ? min : 1n, me);
+      if (buy) { const have = await haveP; const need = amt + gp * BigInt(GAS[tx.gk]); if (have < need) throw new Error('not enough BNB: ' + (Number(have) / 1e18).toFixed(4) + ', this needs about ' + (Number(need) / 1e18).toFixed(4)); }
+      if (!live) {
+        const sim = await rpc('eth_estimateGas', [{ from: me, to: tx.to, value: '0x' + tx.value.toString(16), data: tx.data }]).then(g => ({ ok: true, gas: Number(BigInt(g)) }), e => ({ ok: false, err: String(e.message).slice(0, 160) }));
+        return { sent: false, route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), sim };
+      }
+      const out = { route: r.route, venue: r.venue, out: est.toString(), min: min.toString(), dec: r.dec };
+      let n = await nP; held = n;
+      if (tx.spender && (await alP) < tx.amt) {   /* first sell on this venue: approve, then the sell right behind it */
+        out.approve = await signSend({ to: r.token, value: 0n, data: E.call('approve(address,uint256)', [tx.spender, MAXU]), gk: 'approve' }, key, me, n, gp);
+        held = null; used = true; n = await nonceOf(me); held = n;
+      }
+      Object.assign(out, await signSend(tx, key, me, n, gp)); held = null; used = true;
+      if (buy) preApprove(r, key, me, gp).catch(() => {});   /* so the first sell needs no approval */
+      return out;
+    } catch (e) { if (held != null) nonceBack(me, held); else if (nP && !used) { const k = await nP.catch(() => null); if (k != null) nonceBack(me, k); } throw e; }
+  }
+  /* 3.29.31: buys this wallet made on a coin that the panel never booked (3.14.0-3.29.30: the 'confirmed' reply carried a BigInt Chrome can
+     not pass, so no buy was ever booked): the coin's Transfer logs to your address over the last ~4.5 h (publicnode: under 10,000 blocks a
+     query), each one's transaction sent by your wallet with BNB = a buy of that much BNB. Sells are not rebuilt (their BNB comes back inside
+     the call): when there was one, nothing is filled in. */
+  async function buysOf(token, me) {
+    const T = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', pad = '0x' + low(me).slice(2).padStart(64, '0'), U = ['https://bsc-rpc.publicnode.com'], hx = v => '0x' + v.toString(16);
+    const top = parseInt(await rpc('eth_blockNumber', [], U), 16), ins = new Set(); let sells = 0;
+    for (let k = 0; k < 4; k++) { const hi = top - k * 9000, lo = hi - 8999;
+      const [a, b] = await Promise.all([rpc('eth_getLogs', [{ address: token, fromBlock: hx(lo), toBlock: hx(hi), topics: [T, null, pad] }], U), rpc('eth_getLogs', [{ address: token, fromBlock: hx(lo), toBlock: hx(hi), topics: [T, pad] }], U)]);
+      for (const l of a || []) ins.add(l.transactionHash); sells += (b || []).length; }
+    if (sells) return { sells, nb: 0, in: 0 };
+    let bin = 0, nb = 0;
+    for (const h of ins) { const t = await rpc('eth_getTransactionByHash', [h]).catch(() => null); if (t && low(t.from) === low(me) && BigInt(t.value || 0) > 0n) { bin += Number(BigInt(t.value)) / 1e18; nb++; } }
+    return { in: bin, nb, sells: 0 };
   }
   async function preApprove(r, key, me, gp) {
     const spender = r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'pancake_v2q' ? C.V2R : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null; if (!spender) return;
@@ -224,11 +251,11 @@ const BSC = (() => {
     const n = await nonceOf(me);
     try { await signSend({ to: r.token, value: 0n, data: E.call('approve(address,uint256)', [spender, MAXU]), gk: 'approve' }, key, me, n, gp); } catch (e) { nonceBack(me, n); }
   }
-  async function receipt(hash) { const r = await rpc('eth_getTransactionReceipt', [hash]); return r ? { st: r.status === '0x1' ? 'confirmed' : 'failed', block: parseInt(r.blockNumber, 16), gas: BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice || 0) } : { st: 'pending' }; }
+  async function receipt(hash) { const r = await rpc('eth_getTransactionReceipt', [hash]); return r ? { st: r.status === '0x1' ? 'confirmed' : 'failed', block: parseInt(r.blockNumber, 16), gas: Number(BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice || 0)) / 1e18 } : { st: 'pending' }; }   /* 3.29.31: gas in BNB as a number (a BigInt can not travel to the page: the panel never heard 'confirmed') */
 
   /* ---------- the position: tokens held, their BNB value now (a small sell quote scaled up: the price, not the price impact), market cap ---------- */
   async function position(token, me) {
-    const r = await route(token), raw = await balanceOf(r.token, me);
+    warm(); const r = await route(token), raw = await balanceOf(r.token, me);
     let px = 0;   /* BNB per whole token */
     try {
       if (r.route === 'four' || r.route === 'flap') px = r.price || 0;
@@ -238,6 +265,6 @@ const BSC = (() => {
     return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;
