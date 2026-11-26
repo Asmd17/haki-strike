@@ -258,6 +258,10 @@ html.win .bar{left:216px;padding:12px 40px}
    <button class="pri" id="bGo">Add BSC wallet</button>
    <div class="note" style="margin:0">Trades four.meme, Flap and PancakeSwap coins on GMGN, Terminal and Axiom.</div>
   </div>
+  <div class="cd pad" id="bExp" hidden>
+   <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end"><label>Show its private key: your HAKI Strike password<input id="bxPass" type="password" autocomplete="current-password"></label><button class="sec" id="bxGo" type="button">Show key</button></div>
+   <div id="bxOut" hidden><div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-top:8px"><label>Private key. Anyone who has it controls this wallet: paste it only into your own wallet app<input id="bxKey" readonly spellcheck="false" autocomplete="off"></label><button class="sec" id="bxCopy" type="button">Copy</button></div></div>
+  </div>
   <div class="st" id="bst" role="status" aria-live="polite"></div>
  </section>
  <section>

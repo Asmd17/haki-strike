@@ -348,6 +348,9 @@ async function bkeepLoad() {
   try { const key = await kdbDo('readonly', s => s.get('key')); if (!key) return null;
     return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: SOLX.unb64(bkeep.iv) }, key, SOLX.unb64(bkeep.ct)))); } catch (_) { return null; }
 }
+/* 3.29.32: a BSC box is checked by its 0x address. unseal used to check every key as a Solana seed, so a BSC key never opened: Unlock left
+   the BSC wallet locked (only "Stay unlocked" and a fresh import carried it), and a BSC-only password check always said wrong */
+const bscChk = box => s => EVM.addressOf(s).toLowerCase() === String(box.pub || '').toLowerCase();
 async function bseedsAll() {
   const g = LOCKGEN, { bseeds = {} } = await chrome.storage.session.get({ bseeds: {} });
   if (!Object.keys(bseeds).length) { const k = await bkeepLoad(); if (k && Object.keys(k).length && g === LOCKGEN) { await chrome.storage.session.set({ bseeds: k }); return k; } }
@@ -924,7 +927,7 @@ async function handle(m) {
     if (!a.pass || String(a.pass).length < 8) throw new Error('password: at least 8 characters');
     const W = await walletsAll();
     if (W.length) { try { await SOLX.unseal(W[0].box, a.pass); } catch (_) { throw new Error('type the password you use for your other wallets'); } }
-    else { const BW = await bwalletsAll(); if (BW.length) { try { await SOLX.unseal(BW[0].box, a.pass); } catch (_) { throw new Error('type the password of your BSC wallet'); } } }   /* 3.21.5 */
+    else { const BW = await bwalletsAll(); if (BW.length) { try { await SOLX.unseal(BW[0].box, a.pass, bscChk(BW[0].box)); } catch (_) { throw new Error('type the password of your BSC wallet'); } } }   /* 3.21.5 */
     if (W.length >= 20) throw new Error('20 wallets at most');
     const { seed, pub } = await SOLX.readSecret(a.secret, a.expect || '');
     if (W.some(w => w.pub === pub)) throw new Error('this wallet is already added');
@@ -939,7 +942,7 @@ async function handle(m) {
   if (m.op === 'unlock') {   /* one password opens every wallet */
     const W = await walletsAll(), BW = await bwalletsAll(); if (!W.length && !BW.length) throw new Error('no wallet yet');
     const K = {}; for (const w of W) { try { K[w.pub] = SOLX.b64(await SOLX.unseal(w.box, a.pass)); } catch (_) { if (w === W[0]) throw new Error('wrong password'); } }
-    const BK = {}; for (const w of BW) { try { BK[w.addr] = SOLX.b64(await SOLX.unseal(w.box, a.pass)); } catch (_) { if (!W.length && w === BW[0]) throw new Error('wrong password'); } }   /* 3.14.0 BSC */
+    const BK = {}; for (const w of BW) { try { BK[w.addr] = SOLX.b64(await SOLX.unseal(w.box, a.pass, bscChk(w.box))); } catch (_) { if (!W.length && w === BW[0]) throw new Error('wrong password'); } }   /* 3.14.0 BSC */
     await chrome.storage.session.set({ seeds: K, bseeds: BK }); await chrome.storage.session.remove('seed');
     if (a.keep) { await keepSave(K); await bkeepSave(BK); } else { await keepClear(); await chrome.storage.local.remove('bkeep'); }
     licHello(true).catch(() => {});   /* 3.28.0: the wallets are proven now (the free week can start) */
@@ -952,13 +955,18 @@ async function handle(m) {
     if (!a.pass || String(a.pass).length < 8) throw new Error('password: at least 8 characters');
     const W = await walletsAll(), BW = await bwalletsAll();
     if (W.length) { try { await SOLX.unseal(W[0].box, a.pass); } catch (_) { throw new Error('type the password you use for your other wallets'); } }
-    else if (BW.length) { try { await SOLX.unseal(BW[0].box, a.pass); } catch (_) { throw new Error('type the password of your BSC wallet'); } }
+    else if (BW.length) { try { await SOLX.unseal(BW[0].box, a.pass, bscChk(BW[0].box)); } catch (_) { throw new Error('type the password of your BSC wallet'); } }
     const key = EVM.hexToBytes(hex), addr = EVM.addressOf(key);
     if (BW.length && BW[0].addr.toLowerCase() !== addr.toLowerCase()) throw new Error('remove your BSC wallet first (one BSC wallet for now)');   /* 3.21.5: never replaced silently */
     const label = String(a.label || '').trim().slice(0, 24) || 'BSC wallet';
     await chrome.storage.local.set({ bwallets: [{ addr, label, box: await SOLX.seal(key, addr, a.pass) }] });
     const BK = { [addr]: SOLX.b64(key) }; await chrome.storage.session.set({ bseeds: BK }); if (await keepOn()) await bkeepSave(BK);
     return { ok: true, addr };
+  }
+  if (m.op === 'bscExport') {   /* 3.29.32 (owner 1126: to add this wallet on pump.fun): popup only, your password every time; the key goes to the popup and nowhere else */
+    const w = (await bwalletsAll())[0]; if (!w) throw new Error('no BSC wallet here');
+    let key; try { key = await SOLX.unseal(w.box, String(a.pass || ''), bscChk(w.box)); } catch (_) { throw new Error('wrong password'); }
+    return { addr: w.addr, key: EVM.bytesToHex(key) };
   }
   if (m.op === 'bscForget') { await chrome.storage.local.set({ bwallets: [] }); await chrome.storage.local.remove('bkeep'); await chrome.storage.session.remove('bseeds'); return { ok: true }; }
   if (m.op === 'bscWallet') {   /* address, label, unlocked, BNB */
@@ -1482,7 +1490,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return false;
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
-  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
+  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'bscExport', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
   if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
   /* 3.29.31: a BigInt can not travel back to the page (Chrome passes replies as JSON): such a reply was lost and the page waited for nothing */
   const safe = v => { try { JSON.stringify(v); return v; } catch (_) { try { return JSON.parse(JSON.stringify(v, (k, x) => typeof x === 'bigint' ? x.toString() : x)); } catch (__) { return v; } } };

@@ -99,11 +99,11 @@ const SOLX = (() => {
     const ct = new Uint8Array(await subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(pub) }, await kek(pass, salt), seed));
     return { v: 1, pub, salt: b64(salt), iv: b64(iv), ct: b64(ct) };
   }
-  async function unseal(box, pass) {
+  async function unseal(box, pass, chk) {   /* 3.29.32: chk = how to check the opened key (BSC: its 0x address); default = the Solana public key */
     let seed;
     try { seed = new Uint8Array(await subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv), additionalData: new TextEncoder().encode(box.pub) }, await kek(pass, unb64(box.salt)), unb64(box.ct))); }
     catch (_) { throw new Error('wrong password'); }
-    if (await pubOf(seed) !== box.pub) throw new Error('wallet data damaged');
+    if (chk ? !(await chk(seed)) : await pubOf(seed) !== box.pub) throw new Error('wallet data damaged');
     return seed;
   }
   function sellAmount(raw, pct) { raw = BigInt(raw); if (raw <= 0n || !(pct > 0 && pct <= 100)) return 0n; if (pct >= 100) return raw; return raw * BigInt(Math.round(pct * 100)) / 10000n; }

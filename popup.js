@@ -354,6 +354,7 @@ $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
 /* ---- BSC wallet (3.14.0) ---- */
 async function paintBsc() {
   const r = await ask('bscWallet');
+  $('bExp').hidden = !r || !!r.none;
   if (!r || r.none) { $('bList').innerHTML = ''; $('bList').hidden = true; $('bNew').hidden = false; $('bPl').hidden = false; return; }
   $('bNew').hidden = true; $('bList').hidden = false;
   $('bList').innerHTML = '<div class="wi"><span class="av" aria-hidden="true" style="background:#F0B90B;color:#000">B</span><span class="t"><b>' + esc(r.label || 'BSC wallet') + '</b><i>' + esc(r.addr.slice(0, 6) + '…' + r.addr.slice(-6)) + '</i></span>'
@@ -361,6 +362,15 @@ async function paintBsc() {
     + '<button class="rm" id="bRm" aria-label="Remove the BSC wallet" title="Remove this wallet from the extension (the coins stay on it)">' + RM + '</button></div>';
   $('bRm').onclick = async () => { if (!confirm('Remove the BSC wallet from the extension? Its coins stay on the wallet; you can add it again with its private key.')) return; await ask('bscForget'); say('bst', 'BSC wallet removed', 'ok'); paintBsc(); };
 }
+/* 3.29.32 the BSC wallet's private key, to add the same wallet elsewhere: your password every time, shown 60 s, then cleared */
+let bxT = 0;
+const bxHide = () => { $('bxKey').value = ''; $('bxOut').hidden = true; };
+$('bxGo').onclick = async () => {
+  const r = await ask('bscExport', { pass: $('bxPass').value }); $('bxPass').value = '';
+  if (!r || r.err) { say('bst', (r && r.err) || 'failed', 'bad'); return; }
+  $('bxKey').value = r.key; $('bxOut').hidden = false; say('bst', 'Shown for 60 s (wallet ' + r.addr + ')', 'ok'); clearTimeout(bxT); bxT = setTimeout(bxHide, 60000);
+};
+$('bxCopy').onclick = async () => { try { await navigator.clipboard.writeText($('bxKey').value); say('bst', 'Copied', 'ok'); } catch (_) { $('bxKey').select(); } };
 $('bGo').onclick = async () => {
   say('bst', 'Adding…'); const r = await ask('bscImport', { secret: $('bKey').value, pass: $('bPass').value });
   $('bKey').value = ''; $('bPass').value = '';
