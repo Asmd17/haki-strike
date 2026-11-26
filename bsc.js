@@ -358,18 +358,30 @@ const BSC = (() => {
   async function receipt(hash) { const r = await rpc('eth_getTransactionReceipt', [hash]); return r ? { st: r.status === '0x1' ? 'confirmed' : 'failed', block: parseInt(r.blockNumber, 16), gas: Number(BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice || 0)) / 1e18 } : { st: 'pending' }; }   /* 3.29.31: gas in BNB as a number (a BigInt can not travel to the page: the panel never heard 'confirmed') */
 
   /* ---------- the position: tokens held, their BNB value now (a small sell quote scaled up: the price, not the price impact), market cap ---------- */
+  const BU = { v: null, t: 0 };
+  async function bnbUsd() {   /* $ per BNB: PancakeSwap V2 WBNB -> USDT (18 decimals on BNB Chain), kept 60 s */
+    if (BU.v && Date.now() - BU.t < 60000) return BU.v;
+    const w = words(await rpc('eth_call', [{ to: C.V2R, data: E.call('getAmountsOut(uint256,address[])', [10n ** 18n, [C.WBNB, '0x55d398326f99059fF775485246999027B3197955']]) }, 'latest']));
+    const v = Number(w[w.length - 1] || 0n) / 1e18; if (v > 1 && v < 100000) { BU.v = v; BU.t = Date.now(); } return BU.v;
+  }
   async function position(token, me) {
-    warm(); const r = await route(token), raw = await balanceOf(r.token, me); r.me = me;
-    let px = 0;   /* BNB per whole token */
+    /* 3.29.37 (owner 1126 "pnl долго обновляется, не переходит в доллары"): a four.meme / Flap coin was valued at the price inside the
+       venue lookup, which is kept 20 s, so the PnL moved every 20 s; its price is now read fresh on every poll (one call, beside the
+       balance). The BNB price in $ (PancakeSwap WBNB -> USDT, kept 60 s) goes back too, so a click on the PnL shows dollars. */
+    warm(); const r = await route(token); r.me = me;
+    const fpx = r.route === 'four' ? rpc('eth_call', [{ to: C.HELPER, data: E.call('getTokenInfo(address)', [r.token]) }, 'latest']).then(h => { const w = words(h); return w.length >= 12 && w[1] !== 0n ? Number(w[3]) / 1e18 : 0; }).catch(() => 0)
+      : r.route === 'flap' ? rpc('eth_call', [{ to: C.FLAP, data: E.call('getTokenV5(address)', [r.token]) }, 'latest']).then(h => { const w = words(h); return w.length >= 11 ? Number(w[3]) / 1e18 : 0; }).catch(() => 0) : Promise.resolve(0);
+    const [raw, fresh, usd] = await Promise.all([balanceOf(r.token, me), fpx, bnbUsd().catch(() => null)]);
+    let px = fresh || 0;   /* BNB per whole token */
     try {
       if (r.route === 'openfour') { const probe = 10n ** 15n, got = await ofQuote(r, 'buy', probe, me); if (got > 0n) px = 0.001 / (Number(got) / 10 ** r.dec); }
-      if (r.route === 'four' || r.route === 'flap') px = r.price || 0;
+      if (!px && (r.route === 'four' || r.route === 'flap')) px = r.price || 0;
       if (!px && ROUTES.includes(r.route)) { const unit = 10n ** BigInt(r.dec), probe = raw > 0n ? raw / 50n || raw : unit; const out = await quote(r, 'sell', r.route === 'four' || r.route === 'four_x' ? probe / 10n ** 9n * 10n ** 9n || 10n ** 9n : probe); px = Number(out) / 1e18 / (Number(probe) / 10 ** r.dec); }
     } catch (_) {}
     const ui = Number(raw) / 10 ** r.dec;
-    return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px };
+    return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px, usd };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell, ofPaths, ofQuote, OF };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell, ofPaths, ofQuote, OF, bnbUsd };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;

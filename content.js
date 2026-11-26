@@ -717,13 +717,13 @@ button.c,.rs button.c{box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 -
     if (has && !L.nb && !L.ns && !BSYNC.has(a) && !nBuy && !selling && Date.now() - bscLastT > 30000) { BSYNC.add(a);
       send('bscSync', { token: a }).then(async s => { if (!s || s.err || !(s.nb > 0) || Date.now() - bscLastT < 30000) return;
         await bled(a, X => { if (!X.nb && !X.ns) { X.in = s.in; X.nb = s.nb; } }); if (a === A) bscPoll(true); }); }
-    paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: null, aslip: p.aslip,
+    paintPos({ mint: a, raw: p.raw, ui: p.ui, dec: p.dec, value_sol: val, mc_sol: p.mc_bnb, usd: p.usd || null, aslip: p.aslip,
       pnl: L.nb || L.ns ? { bought: L.in, sold: L.out, pnl, pct: L.in > 0 ? pnl / L.in * 100 : null, gas: 0, nb: L.nb, ns: L.ns } : null });
     if (!has && p.route && !['four', 'four_x', 'flap', 'pancake_v2', 'pancake_v2q', 'pancake_v3', 'openfour'].includes(p.route) && !S.title) status(p.why || 'no BNB market found for this coin', 'bad');
   }
   const watchNow = () => {
     clearInterval(bscT); bscT = 0;
-    if (BSCM()) { if (port) try { port.postMessage({ op: 'watch', a: null }); } catch (_) {} bscPoll(); bscT = setInterval(() => { if (!document.hidden) bscPoll(); }, 1500); return; }
+    if (BSCM()) { if (port) try { port.postMessage({ op: 'watch', a: null }); } catch (_) {} bscPoll(); bscT = setInterval(() => { if (!document.hidden) bscPoll(); }, 1000); return; }   /* 3.29.37: every 1 s (was 1.5 s) */
     if (port) try { port.postMessage({ op: 'watch', a: A, isMint: isMintPage() }); } catch (_) {}
     if (PAPER) paperPoll();
     if (C && C.snipe) send('snipe', { do: 'list' }).then(r => { if (r && !r.err) snpSet(r.armed); });
