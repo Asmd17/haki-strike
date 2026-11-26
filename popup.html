@@ -315,11 +315,12 @@ html.win .bar{left:216px;padding:12px 40px}
   </div>
  </section>
  <section id="brBox" hidden>
-  <div class="sh"><h2>Bridge</h2><span class="n" style="margin-left:auto;font-size:12px">SOL on Solana → BNB on BNB Chain · Relay</span></div>
+  <div class="sh"><h2>Bridge</h2><div class="r"><div class="seg" id="brDir" role="group" aria-label="Direction"><button type="button" data-d="s2b" aria-pressed="true">SOL → BNB</button><button type="button" data-d="b2s" aria-pressed="false">BNB → SOL</button></div></div></div>
   <div class="cd pad">
-   <div class="g"><label>From<select id="brFrom"></select></label><label>To, a BNB Chain address<span class="in"><input id="brTo" placeholder="0x…" spellcheck="false" autocomplete="off"></span></label></div>
-   <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end"><label>Amount<span class="in"><input id="brAmt" inputmode="decimal" placeholder="0.5"><i>SOL</i></span></label><button class="sec" id="brMax" type="button">Max</button><button class="pri" id="brGo">Bridge</button></div>
+   <div class="g"><label>From<select id="brFrom"></select></label><label><span id="brToL">To, a BNB Chain address</span><span class="in"><input id="brTo" placeholder="0x…" spellcheck="false" autocomplete="off"></span></label></div>
+   <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end"><label>Amount<span class="in"><input id="brAmt" inputmode="decimal" placeholder="0.5"><i id="brU">SOL</i></span></label><button class="sec" id="brMax" type="button">Max</button><button class="pri" id="brGo">Bridge</button></div>
    <div class="n" id="brQ" style="margin-top:8px;font-size:12px" aria-live="polite"></div>
+   <div class="n" id="brWay" style="margin-top:4px;font-size:12px">SOL on Solana → BNB on BNB Chain · Relay</div>
    <div id="brL" style="margin-top:8px;font-size:12px;display:grid;gap:4px"></div>
   </div>
  </section>

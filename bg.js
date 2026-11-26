@@ -1110,6 +1110,27 @@ async function handle(m) {
     await bridgeSet(e); bridgeWatch(e.id).catch(() => {});
     return Object.assign({ ok: true }, e);
   }
+  if (m.op === 'bridgeBnbQuote' || m.op === 'bridgeBnb') {   /* 3.29.39 Bridge back: BNB from your BSC wallet -> SOL on Solana (Relay, bsc.js) */
+    const w = (await bwalletsAll())[0]; if (!w) throw new Error('add your BSC wallet first: Wallets, BSC');
+    const to = String(a.to || '').trim(); if (!SOLX.isAddr(to)) throw new Error('type a Solana address');
+    const have = await BSC.bnb(w.addr), KEEP = 50000000000000n, bal = (Number(have) / 1e18).toFixed(5);   /* 0.00005 BNB stays: the fee of this and the next transactions */
+    let wei = 0n;
+    if (a.max) wei = have - KEEP;
+    else { const s = String(a.bnb || '').replace(',', '.').trim(); if (!/^\d*\.?\d+$/.test(s)) throw new Error('type how much BNB');
+      const [i, f = ''] = s.split('.'); wei = BigInt(i || '0') * 10n ** 18n + BigInt((f + '0'.repeat(18)).slice(0, 18)); }
+    if (!(wei > 0n)) throw new Error(a.max ? 'the BSC wallet has ' + bal + ' BNB' : 'type how much BNB');
+    if (wei > have - KEEP) throw new Error('the BSC wallet has ' + bal + ' BNB; 0.00005 stays for the fee');
+    const q = await BSC.bridgeQuote(w.addr, to, wei);
+    if (m.op === 'bridgeBnbQuote') return { bnb: q.bnb, sol: q.sol, usd: q.usd, impact: q.impact, secs: q.secs, fee: q.fee };
+    if (q.impact < -5) throw new Error('Relay would keep ' + (-q.impact).toFixed(1) + ' % of it (fees on a small amount): not sent');
+    const { addr, key } = await bscKey(); if (addr.toLowerCase() !== w.addr.toLowerCase()) throw new Error('the BSC wallet changed: try again');
+    const s = await BSC.bridgeSend(q, key, addr);
+    const e = { t: Date.now(), id: q.id, dir: 'b2s', sig: s.hash, bnb: q.bnb, sol: q.sol, to: q.to, from: w.label || 'BSC wallet', st: s.st === 'failed' ? 'failure' : 'sent', out: null };
+    await bridgeSet(e);
+    if (s.st === 'failed') throw new Error('the deposit failed on BNB Chain: only the network fee was spent');
+    bridgeWatch(e.id).catch(() => {});
+    return Object.assign({ ok: true }, e);
+  }
   if (m.op === 'bridgeList') { const { bridges = [] } = await chrome.storage.local.get({ bridges: [] }); for (const e of bridges) if (/^(sent|waiting|pending|submitted|delayed)$/.test(e.st) && Date.now() - e.t < 600000) bridgeWatch(e.id).catch(() => {}); return { list: bridges.slice(-4).reverse() }; }
   if (m.op === 'move') {   /* SOL from one of your wallets to another of yours (never anywhere else) */
     const W = await walletsAll(), K = await seedsAll(), f = W.find(w => w.pub === a.from), t = W.find(w => w.pub === a.to);
@@ -1510,7 +1531,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     return false;
   }
   const fromPopup = sender.id === chrome.runtime.id && String(sender.url || '').startsWith(chrome.runtime.getURL('popup.html'));   /* key handling only from our own popup page, never from a page script */
-  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bscImport', 'bscForget', 'bscExport', 'bscDustList', 'bscDustOne', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
+  if (['import', 'unlock', 'lock', 'forget', 'rename', 'reclaim', 'move', 'bridge', 'bridgeBnb', 'bscImport', 'bscForget', 'bscExport', 'bscDustList', 'bscDustOne', 'licPay', 'snipeCfg'].includes(m.op) && !fromPopup) { reply({ err: 'not allowed here' }); return false; }
   if (sender.tab && sender.tab.url) LHOST = hostOf(sender.tab.url);
   /* 3.29.31: a BigInt can not travel back to the page (Chrome passes replies as JSON): such a reply was lost and the page waited for nothing */
   const safe = v => { try { JSON.stringify(v); return v; } catch (_) { try { return JSON.parse(JSON.stringify(v, (k, x) => typeof x === 'bigint' ? x.toString() : x)); } catch (__) { return v; } } };

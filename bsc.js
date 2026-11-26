@@ -363,6 +363,44 @@ const BSC = (() => {
     try { s = await signSend({ to: AUG, value: 0n, data: bj.data, gas: Math.ceil(g * 1.3) }, key, me, n, gp); } catch (e) { nonceBack(me, n); return Object.assign(res, { skip: 'not sent: ' + String(e.message).slice(0, 80) }); }
     const sr = await waitRc(s.hash); return Object.assign(res, { hash: s.hash, st: sr.st, ok: sr.st === 'confirmed' });
   }
+  /* ---------- 3.29.39 Bridge back (owner 1126 "сделай чтоб и с бнб можно было на сол"): BNB from your BSC wallet -> SOL on Solana ----------
+     Relay (api.relay.link, the same provider as the SOL -> BNB bridge). Its quote is ONE call of Relay's depository on BNB Chain
+     (0x4cd00e.., Relay's /chains: protocol v2 depository; not a proxy): depositNative(depositor = your wallet, id = the request), value = your
+     amount, and Relay's solver pays the SOL on Solana within seconds (a failed fill refunds the depositor). The recipient is tied to the request
+     off-chain, so the quote must name your Solana recipient, SOL on Solana and your wallet as the sender, and nothing is signed unless the
+     call is exactly that deposit: Relay's depository, chain 56, your amount, your wallet as the depositor, the quote's own request id. */
+  const RELAY = 'https://api.relay.link', RDEPO = '0x4cd00e387622c35bddb9b4c962c136462338bc31', SOLCH = 792703809, SOLNAT = '11111111111111111111111111111111';
+  async function bridgeQuote(me, to, wei) {
+    to = String(to || '').trim(); if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to)) throw new Error('type a Solana address');
+    if (!(wei >= 10n ** 15n)) throw new Error('at least 0.001 BNB');
+    const r = await fetch(RELAY + '/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: me, originChainId: 56,
+      destinationChainId: SOLCH, originCurrency: ZERO, destinationCurrency: SOLNAT, recipient: to, tradeType: 'EXACT_INPUT', amount: wei.toString() }) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !Array.isArray(j.steps)) throw new Error('Relay: ' + String((j && (j.message || j.error)) || ('HTTP ' + r.status)).slice(0, 160));
+    const d = j.details || {}, out = d.currencyOut || {}, cur = out.currency || {};
+    if (low(d.sender) !== low(me) || d.recipient !== to || +cur.chainId !== SOLCH || cur.address !== SOLNAT) throw new Error('Relay answered for another recipient or coin: not used');
+    const st = j.steps.filter(s => s.kind === 'transaction');
+    if (j.steps.length !== 1 || st.length !== 1 || (st[0].items || []).length !== 1) throw new Error('Relay offered a route of ' + j.steps.length + ' steps: not used');
+    /* the deposit's id is Relay's v2 order id; the order itself must pay only your recipient, in SOL on Solana, with no calls, and refund only
+       your wallet (or your recipient) */
+    const x = (st[0].items[0] || {}).data || {}, id = low(st[0].requestId || ''), v2 = (j.protocol || {}).v2 || {}, od = v2.orderData || {}, oid = low(v2.orderId || '');
+    const o = od.output || {}, P = o.payments || [], I = od.inputs || [], R = (I[0] || {}).refunds || [], pay = (I[0] || {}).payment || {};
+    let val = -1n, amt = -2n; try { val = BigInt(x.value || 0); amt = BigInt(pay.amount || 0); } catch (_) {}
+    const ok = /^0x[0-9a-f]{64}$/.test(id) && /^0x[0-9a-f]{64}$/.test(oid) && low(x.to) === RDEPO && +x.chainId === 56 && val === wei
+      && low(x.data) === '0x49290c1c' + low(me).slice(2).padStart(64, '0') + oid.slice(2)
+      && low((v2.paymentDetails || {}).depository) === RDEPO && I.length === 1 && pay.chainId === 'bnb' && low(pay.currency) === ZERO && amt === wei
+      && o.chainId === 'solana' && P.length === 1 && P[0].recipient === to && P[0].currency === SOLNAT && !(o.calls || []).length
+      && R.length >= 1 && R.every(f => (f.chainId === 'bnb' && low(f.recipient) === low(me)) || (f.chainId === 'solana' && f.recipient === to));
+    if (!ok) throw new Error('the Relay route is not the plain BNB deposit HAKI knows: not signed');
+    return { id, tx: { to: RDEPO, value: wei, data: low(x.data) }, bnb: Number(wei) / 1e18, to, sol: +out.amountFormatted || 0, usd: +out.amountUsd || 0,
+      impact: +((d.totalImpact || {}).percent) || 0, secs: +d.timeEstimate || 0, fee: (+((j.fees || {}).relayer || {}).amount || 0) / 1e18 };
+  }
+  async function bridgeSend(q, key, me) {
+    const [gp, g] = await Promise.all([gasPrice(0), rpc('eth_estimateGas', [{ from: me, to: q.tx.to, value: '0x' + q.tx.value.toString(16), data: q.tx.data }])]);
+    const n = await nonceOf(me); let s;
+    try { s = await signSend({ to: q.tx.to, value: q.tx.value, data: q.tx.data, gas: Math.ceil(Number(BigInt(g)) * 1.3) }, key, me, n, gp); } catch (e) { nonceBack(me, n); throw e; }
+    const rc = await waitRc(s.hash, 15000); return { hash: s.hash, st: rc.st };
+  }
   async function preApprove(r, key, me, gp) {
     const spender = r.route === 'openfour' ? OF.R : r.route === 'four' || r.route === 'four_x' ? C.TM2 : r.route === 'pancake_v2q' ? C.V2R : r.route === 'flap' ? C.FLAP : r.route === 'pancake_v2' ? C.V2R : r.route === 'pancake_v3' ? C.SR : null; if (!spender) return;
     await new Promise(s => setTimeout(s, 4000));
@@ -397,6 +435,6 @@ const BSC = (() => {
     return { token: r.token, route: r.route, venue: r.venue, why: r.why, sym: r.sym, dec: r.dec, raw: raw.toString(), ui, value_bnb: ui * px, mc_bnb: px * Number(r.supply) / 10 ** r.dec, price: px, usd };
   }
 
-  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell, ofPaths, ofQuote, OF, bnbUsd };
+  return { C, GAS, ROUTES, rpc, batch, route, quote, quoteSafe, build, trade, receipt, position, balanceOf, bnb, sendRaw, allowance, buysOf, holdings, dustSell, ofPaths, ofQuote, OF, bnbUsd, bridgeQuote, bridgeSend };
 })();
 if (typeof module !== 'undefined') module.exports = BSC;
